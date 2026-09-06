@@ -1,0 +1,115 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Board, PLAYER_NAMES, SIZE, index, isPlayable } from '../engine';
+import { colors, playerColor, radius } from './theme';
+
+export interface Destination {
+  square: number;
+  capture: boolean;
+}
+
+interface Props {
+  board: Board;
+  cellSize: number;
+  selected?: number | null;
+  destinations?: readonly Destination[];
+  /** Squares to tint, e.g. where the last move came from and went to. */
+  marks?: readonly number[];
+  interactive: boolean;
+  onPressSquare?: (square: number) => void;
+}
+
+/** The big playable board: 8x8 squares with pieces drawn as discs. */
+export function CheckerBoard({ board, cellSize, selected, destinations, marks, interactive, onPressSquare }: Props) {
+  const rows: React.ReactNode[] = [];
+  const pieceSize = Math.round(cellSize * 0.78);
+  for (let r = SIZE - 1; r >= 0; r--) {
+    const cells: React.ReactNode[] = [];
+    for (let c = 0; c < SIZE; c++) {
+      const sq = index(r, c);
+      const piece = board.cells[sq];
+      const dark = isPlayable(r, c);
+      const dest = destinations?.find((d) => d.square === sq);
+      const marked = marks?.includes(sq) ?? false;
+      const isSelected = selected === sq;
+      const label = `${String.fromCharCode(97 + c)}${r + 1}${
+        piece ? `, ${PLAYER_NAMES[piece.player]} ${piece.king ? 'king' : 'man'}` : ''
+      }${dest ? (dest.capture ? ', jump here' : ', move here') : ''}`;
+      cells.push(
+        <Pressable
+          key={c}
+          disabled={!interactive || !dark}
+          onPress={onPressSquare ? () => onPressSquare(sq) : undefined}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          style={[
+            styles.square,
+            { width: cellSize, height: cellSize, backgroundColor: dark ? colors.squareDark : colors.squareLight },
+            marked && dark && styles.marked,
+            isSelected && styles.selectedSquare,
+          ]}
+        >
+          {piece ? (
+            <View
+              style={[
+                styles.piece,
+                {
+                  width: pieceSize,
+                  height: pieceSize,
+                  borderRadius: pieceSize / 2,
+                  backgroundColor: playerColor(piece.player),
+                  borderColor: colors.playersEdge[piece.player],
+                },
+                isSelected && styles.selectedPiece,
+              ]}
+            >
+              {piece.king ? (
+                <Text style={[styles.crown, { fontSize: pieceSize * 0.55, color: colors.playersInk[piece.player] }]}>♛</Text>
+              ) : null}
+            </View>
+          ) : dest ? (
+            <View
+              style={[
+                styles.dot,
+                {
+                  width: pieceSize * 0.4,
+                  height: pieceSize * 0.4,
+                  borderRadius: pieceSize * 0.2,
+                  backgroundColor: dest.capture ? colors.warning : colors.success,
+                },
+              ]}
+            />
+          ) : null}
+        </Pressable>,
+      );
+    }
+    rows.push(
+      <View key={r} style={styles.row}>
+        {cells}
+      </View>,
+    );
+  }
+  return <View style={styles.board}>{rows}</View>;
+}
+
+const styles = StyleSheet.create({
+  board: {
+    alignSelf: 'center',
+    borderWidth: 3,
+    borderColor: colors.boardEdge,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  row: { flexDirection: 'row' },
+  square: { alignItems: 'center', justifyContent: 'center' },
+  marked: { backgroundColor: '#a66e3f' },
+  selectedSquare: { backgroundColor: '#5d7f9a' },
+  piece: {
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedPiece: { borderColor: colors.focus, borderWidth: 3.5 },
+  crown: { fontWeight: '700', lineHeight: undefined },
+  dot: { opacity: 0.95 },
+});
