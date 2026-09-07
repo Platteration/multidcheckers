@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   BoardRef,
   GameState,
@@ -15,6 +15,8 @@ import { useTheme } from '../app/theme';
 
 const SLOT = MINI_WIDTH + 10;
 const ROW = MINI_HEIGHT + 16;
+/** Height of the turn-number header above the first row. */
+const HEADER = 18;
 
 interface Props {
   state: GameState;
@@ -41,6 +43,28 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
   const vertical = useRef<ScrollView>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
+  // A time travel: fly a token from the board the piece left to the board it created.
+  const flight = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const flightOpacity = useRef(new Animated.Value(0)).current;
+  const travel = state.lastAction?.type === 'travel' && state.lastCreated.length === 2 ? state.lastAction : null;
+  const flightKey = travel ? `${state.timelines.length}-${state.lastCreated[1].timeline}-${state.lastCreated[1].turn}` : null;
+  useEffect(() => {
+    if (!travel) return;
+    const from = travel.from.timeline;
+    const fromTurn = state.lastCreated[0].turn - 1;
+    const to = state.lastCreated[1];
+    const start = { x: (fromTurn + 1) * SLOT + MINI_WIDTH / 2, y: HEADER + from * ROW + 8 + MINI_HEIGHT / 2 };
+    const end = { x: (to.turn + 1) * SLOT + MINI_WIDTH / 2, y: HEADER + to.timeline * ROW + 8 + MINI_HEIGHT / 2 };
+    flight.setValue(start);
+    flightOpacity.setValue(1);
+    Animated.sequence([
+      Animated.timing(flight, { toValue: end, duration: 650, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(flightOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightKey]);
+  const travellerColor = travel ? colors.players[playerToMoveAt(state.lastCreated[0].turn - 1)] : colors.travel;
+
   // Keep the focused board in view as the player jumps around the multiverse.
   useEffect(() => {
     if (!viewport.width) return;
@@ -60,6 +84,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
       onLayout={(e) => setViewport({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
     >
       <ScrollView ref={vertical} nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={{ width, paddingBottom: spacing.md }}>
+        <View style={{ width, position: 'relative' }}>
         <View style={[styles.turnRow, { width }]}>
           {Array.from({ length: lastTurn + 1 }, (_, turn) => (
             <Text
@@ -73,6 +98,17 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
             </Text>
           ))}
         </View>
+        {state.timelines.map((tl) => {
+          if (!tl.branchedFrom) return null;
+          // A line from the bottom of the board this timeline branched from down to its label.
+          const x = (tl.branchedFrom.turn + 1) * SLOT + MINI_WIDTH / 2;
+          const top = HEADER + tl.branchedFrom.timeline * ROW + 8 + MINI_HEIGHT;
+          const bottom = HEADER + tl.id * ROW + 8;
+          const color = tl.createdBy === null ? colors.textMuted : colors.playerAccent[tl.createdBy];
+          return (
+            <View key={`link-${tl.id}`} pointerEvents="none" style={[styles.link, { left: x - 1, top, height: Math.max(0, bottom - top), backgroundColor: color }]} />
+          );
+        })}
         {state.timelines.map((tl) => {
           const labelColor = tl.createdBy === null ? colors.textMuted : colors.playerAccent[tl.createdBy];
           return (
@@ -131,6 +167,14 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
             </View>
           );
         })}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.flyer,
+            { backgroundColor: travellerColor, opacity: flightOpacity, transform: [{ translateX: flight.x }, { translateY: flight.y }] },
+          ]}
+        />
+        </View>
       </ScrollView>
     </ScrollView>
   );
@@ -163,4 +207,19 @@ const makeStyles = (colors: Theme) =>
   labelText: { fontSize: 13, fontWeight: '800' },
   labelSub: { fontSize: 8, color: colors.textMuted, marginTop: 2 },
   slot: { position: 'absolute', top: 8 },
+  link: { position: 'absolute', width: 2, opacity: 0.55, borderRadius: 1 },
+  flyer: {
+    position: 'absolute',
+    left: -9,
+    top: -9,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 4,
+  },
 });

@@ -259,8 +259,12 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           {state.status !== 'playing' ? null : selection.kind === 'none' ? (
             <>
               <Text style={{ color: colors.playerAccent[mover] }}>■</Text> waiting for {colors.playerNames[mover]}
-              {'   '}
-              <Text style={{ color: colors.playerAccent[otherPlayer(mover)] }}>t</Text> = {colors.playerNames[otherPlayer(mover)]}'s turns
+              {totalWaiting > 1 ? null : (
+                <>
+                  {'   '}
+                  <Text style={{ color: colors.playerAccent[otherPlayer(mover)] }}>t</Text> = {colors.playerNames[otherPlayer(mover)]}'s turns
+                </>
+              )}
             </>
           ) : (
             <>
