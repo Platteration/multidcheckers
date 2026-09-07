@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { EntitlementsProvider } from './src/app/entitlements';
 import { keys, loadJson } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
+import { StatsProvider } from './src/app/stats';
 import { SettingsProvider, useSettings } from './src/app/settings';
 import { GameSetup, looksLikeSavedGame, normaliseSaved } from './src/app/setup';
 import { ThemeProvider, useTheme } from './src/app/theme';
@@ -43,9 +44,11 @@ export default function App() {
       <ThemeProvider>
         <ProgressProvider>
           <EntitlementsProvider>
-            <SafeAreaProvider>
-              <Root />
-            </SafeAreaProvider>
+            <StatsProvider>
+              <SafeAreaProvider>
+                <Root />
+              </SafeAreaProvider>
+            </StatsProvider>
           </EntitlementsProvider>
         </ProgressProvider>
       </ThemeProvider>

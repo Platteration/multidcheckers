@@ -9,12 +9,14 @@ interface Props {
   visible: boolean;
   /** The current game as a code, or null when there is nothing to share yet. */
   code: string | null;
+  /** On the web, a link that opens this game directly. */
+  link?: string | null;
   onLoad: (code: string) => string | null;
   onClose: () => void;
 }
 
 /** Share the game as a code and load one back: play by message, no server needed. */
-export function ShareModal({ visible, code, onLoad, onClose }: Props) {
+export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pasted, setPasted] = useState('');
@@ -32,11 +34,12 @@ export function ShareModal({ visible, code, onLoad, onClose }: Props) {
 
   const share = async () => {
     if (!code) return;
+    const message = link ? `${link}\n\n(or paste this code into the app)\n${code}` : code;
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'share' in navigator) {
-        await (navigator as { share: (d: { text: string }) => Promise<void> }).share({ text: code });
+        await (navigator as { share: (d: { text: string }) => Promise<void> }).share({ text: message });
       } else {
-        await Share.share({ message: code });
+        await Share.share({ message });
       }
     } catch {
       await copy();

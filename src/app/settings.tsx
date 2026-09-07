@@ -17,6 +17,8 @@ export interface Settings {
   pieces: string;
   /** Optional rule variants, keyed by name. */
   variants: Record<string, boolean>;
+  /** The first-launch walkthrough has been seen (or skipped). */
+  welcomed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   skin: 'classic',
   pieces: 'classic',
   variants: {},
+  welcomed: false,
 };
 
 interface SettingsApi {

@@ -3,6 +3,7 @@
     "name": "5D Checkers",
     "slug": "multidcheckers",
     "version": "1.0.0",
+    "scheme": "multidcheckers",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",

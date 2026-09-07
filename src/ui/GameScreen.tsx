@@ -1,9 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Linking, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  Action,
   BOT_NAMES,
   GameState,
+  applyAction,
+  index,
+  newGame,
   SIZE,
   chooseAction,
   getBoard,
@@ -20,7 +24,9 @@ import {
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
+import { codeFromUrl, webLinkFor } from '../app/links';
 import { narrate } from '../app/narrate';
+import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
 import { decodeGame, encodeGame } from '../app/share';
 import { GameSetup } from '../app/setup';
@@ -32,6 +38,9 @@ import { PuzzleResultModal } from './PuzzleResultModal';
 import { ExtrasModal } from './ExtrasModal';
 import { PuzzlesModal } from './PuzzlesModal';
 import { ReplayBar } from './ReplayBar';
+import { StatsModal } from './StatsModal';
+import { WelcomeModal } from './WelcomeModal';
+import { MiniBoard } from './MiniBoard';
 import { ShareModal } from './ShareModal';
 import { Button, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
@@ -49,7 +58,9 @@ interface Props {
 export function GameScreen({ initialHistory, initialSetup }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { settings, setVariant } = useSettings();
+  const { settings, setVariant, update: updateSettings } = useSettings();
+  const { recordGame } = useStats();
+  const [statsOpen, setStatsOpen] = useState(false);
   const rules = useMemo(
     () => ({ flyingKings: !!settings.variants.flyingKings, backCapture: !!settings.variants.backCapture }),
     [settings.variants.flyingKings, settings.variants.backCapture],
@@ -64,6 +75,87 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const humanTurn = game.humanTurn && !replaying;
   const [shareOpen, setShareOpen] = useState(false);
   const [extrasOpen, setExtrasOpen] = useState(false);
+
+  // Fold each finished game (not puzzles) into the record, once.
+  const recordedRef = useRef<GameState | null>(null);
+  useEffect(() => {
+    const live = game.state;
+    if (live.status === 'playing' || game.setup.mode === 'puzzle' || recordedRef.current === live) return;
+    recordedRef.current = live;
+    recordGame(game.history, game.setup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.state.status]);
+
+  // A game code arriving by link (cold start or while running) loads the game.
+  const loadCode = (code: string): string | null => {
+    try {
+      const loaded = decodeGame(code);
+      game.load(loaded.history, loaded.setup);
+      setReplayIndex(null);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  };
+  const loadCodeRef = useRef(loadCode);
+  loadCodeRef.current = loadCode;
+  useEffect(() => {
+    Linking.getInitialURL()
+      .then((url) => {
+        const code = codeFromUrl(url);
+        if (code) loadCodeRef.current(code);
+      })
+      .catch(() => {});
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      const code = codeFromUrl(url);
+      if (code) loadCodeRef.current(code);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // A tiny multiverse for the welcome pages: four moves, then a travel.
+  const welcomeDemo = useMemo(() => {
+    const step = (from: number, to: number): Action => ({ type: 'move', timeline: 0, move: { from, path: [to], captures: [] } });
+    const steps: Action[] = [
+      step(index(2, 1), index(3, 0)),
+      step(index(5, 6), index(4, 7)),
+      step(index(2, 3), index(3, 2)),
+      step(index(5, 4), index(4, 5)),
+      { type: 'travel', from: { timeline: 0, square: index(3, 2) }, to: { timeline: 0, turn: 2 } },
+    ];
+    return steps.reduce((st, a) => applyAction(st, a), newGame());
+  }, []);
+  const welcomePages = useMemo(
+    () => [
+      {
+        title: "It's checkers. Every move is remembered.",
+        body: 'Each turn makes a new board. The map at the bottom shows every board that ever existed, left to right through time.',
+        art: (
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {welcomeDemo.timelines[0].boards.slice(0, 4).map((b, i) => (
+              <MiniBoard key={i} board={b} />
+            ))}
+          </View>
+        ),
+      },
+      {
+        title: 'Send a piece into the past.',
+        body: 'Tap one of your pieces, then a glowing past board where its square is free. History branches: a new timeline starts there with your extra piece, and your opponent must answer on it too.',
+        art: (
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            <MiniBoard board={welcomeDemo.timelines[0].boards[2]} ring={colors.travel} badge="GO" />
+            <Text style={{ color: colors.travel, fontWeight: '800' }}>↓</Text>
+            <MiniBoard board={welcomeDemo.timelines[1].boards[0]} ring={colors.playerAccent[1]} badge="play" />
+          </View>
+        ),
+      },
+      {
+        title: 'Wipe them off any board to win.',
+        body: 'Play every board marked "play" before your turn ends. Jumps are mandatory. Time travel is the one way out of a forced jump, but leaving your last piece behind loses that board.',
+      },
+    ],
+    [welcomeDemo, colors],
+  );
   const shareCode = useMemo(
     () => (game.history.length > 1 && game.setup.mode !== 'puzzle' ? encodeGame(game.history, game.setup) : null),
     [game.history, game.setup],
@@ -287,6 +379,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           { label: 'Play by message', onPress: () => setShareOpen(true) },
           { label: 'Puzzles', onPress: () => setPuzzlesOpen(true) },
           { label: 'How to play', onPress: () => setRulesOpen(true) },
+          { label: 'Your record', onPress: () => setStatsOpen(true) },
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
           { label: 'Extras', onPress: () => setExtrasOpen(true) },
         ]}
@@ -301,20 +394,25 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         }}
       />
       <ExtrasModal visible={extrasOpen} onClose={() => setExtrasOpen(false)} />
+      <StatsModal visible={statsOpen} onClose={() => setStatsOpen(false)} />
+      <WelcomeModal
+        visible={!settings.welcomed}
+        pages={welcomePages}
+        onClose={() => updateSettings({ welcomed: true })}
+        onPuzzles={() => {
+          updateSettings({ welcomed: true });
+          setPuzzlesOpen(true);
+        }}
+      />
       <ShareModal
         visible={shareOpen}
         code={shareCode}
         onClose={() => setShareOpen(false)}
+        link={shareCode ? webLinkFor(shareCode) : null}
         onLoad={(code) => {
-          try {
-            const loaded = decodeGame(code);
-            game.load(loaded.history, loaded.setup);
-            setReplayIndex(null);
-            setShareOpen(false);
-            return null;
-          } catch (e) {
-            return e instanceof Error ? e.message : String(e);
-          }
+          const problem = loadCode(code);
+          if (!problem) setShareOpen(false);
+          return problem;
         }}
       />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)}>
