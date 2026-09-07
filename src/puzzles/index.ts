@@ -17,6 +17,8 @@ export interface Puzzle {
   player: Player;
   /** How many of the player's own actions may be used. */
   within: number;
+  /** 'win' (default): win within the budget. 'survive': still be alive after it, whatever the bot does. */
+  goal?: 'win' | 'survive';
   /** The key move(s). For multi-move puzzles, only the setup moves; the finish is any immediate win. */
   solution: Action[];
 }
@@ -33,6 +35,26 @@ function fromBoards(boards: Board[], rules: Partial<Rules> = {}): GameState {
 }
 
 const rows = (r: string[]) => boardFromRows(r);
+const EMPTY = rows(['........', '........', '........', '........', '........', '........', '........', '........']);
+
+/** Two timelines: the root, and a branch that split off it. */
+function withBranch(root: Board[], branch: { startTurn: number; boards: Board[]; from: number }, rules: Partial<Rules> = {}): GameState {
+  const base = fromBoards(root, rules);
+  return {
+    ...base,
+    timelines: [
+      base.timelines[0],
+      {
+        id: 1,
+        startTurn: branch.startTurn,
+        boards: branch.boards,
+        createdBy: base.toMove === 0 ? 1 : 0,
+        branchedFrom: { timeline: 0, turn: branch.startTurn - 1 },
+        origin: { timeline: 0, turn: branch.from },
+      },
+    ],
+  };
+}
 const sq = (row: number, col: number) => index(row, col);
 
 export const PUZZLES: Puzzle[] = [
@@ -99,6 +121,35 @@ export const PUZZLES: Puzzle[] = [
     solution: [{ type: 'move', timeline: 0, move: { from: sq(0, 1), path: [sq(4, 5), sq(6, 3)], captures: [sq(3, 4), sq(5, 4)] } }],
   },
 ];
+
+PUZZLES.push(
+  {
+    id: 'twoboards',
+    title: 'Two boards, one turn',
+    brief: 'Two boards are waiting for Red. Only one of them can be won right now.',
+    hint: 'Check the branch, Timeline 2: a single jump there takes the last black piece.',
+    player: 0,
+    within: 1,
+    state: withBranch(
+      [EMPTY, EMPTY, EMPTY, EMPTY, rows(['........', '..b.....', '........', '........', '........', '........', '.r......', '........'])],
+      { startTurn: 2, from: 3, boards: [rows(['........', '........', '........', '........', '....b...', '...r....', '........', '........'])] },
+    ),
+    solution: [{ type: 'move', timeline: 1, move: { from: sq(2, 3), path: [sq(4, 5)], captures: [sq(3, 4)] } }],
+  },
+  {
+    id: 'backward',
+    title: 'Look behind you',
+    brief: 'Red to move, backward captures on. The last black man is behind your line.',
+    hint: 'Men may jump backwards in this variant. The man on d4 can take c3.',
+    player: 0,
+    within: 1,
+    state: fromBoards(
+      [EMPTY, EMPTY, rows(['........', '........', '........', '........', '...r....', '..b.....', '........', '........'])],
+      { backCapture: true },
+    ),
+    solution: [{ type: 'move', timeline: 0, move: { from: sq(3, 3), path: [sq(1, 1)], captures: [sq(2, 2)] } }],
+  },
+);
 
 export function puzzleById(id: string): Puzzle | undefined {
   return PUZZLES.find((p) => p.id === id);

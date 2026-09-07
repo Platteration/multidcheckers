@@ -1,4 +1,4 @@
-import { applyAction, chooseAction, pendingTimelines } from '../index';
+import { applyAction, chooseAction, enumerateActions, pendingTimelines } from '../index';
 import { PUZZLES } from '../../puzzles';
 
 describe('puzzles', () => {
@@ -8,6 +8,17 @@ describe('puzzles', () => {
     expect(g.toMove).toBe(puzzle.player);
     expect(pendingTimelines(g).length).toBeGreaterThan(0);
     let used = 0;
+    if (puzzle.goal === 'survive') {
+      for (const a of puzzle.solution) g = applyAction(g, a);
+      expect(g.status).toBe('playing');
+      // No reply by the opponent may win at once.
+      const probe = g.toMove === puzzle.player ? { ...g, toMove: (1 - puzzle.player) as 0 | 1 } : g;
+      for (const reply of enumerateActions(probe, 3)) {
+        const after = applyAction(probe, reply);
+        expect(after.status === 'won' && after.win?.player !== puzzle.player).toBe(false);
+      }
+      return;
+    }
     for (const a of puzzle.solution) {
       expect(g.toMove).toBe(puzzle.player);
       g = applyAction(g, a);

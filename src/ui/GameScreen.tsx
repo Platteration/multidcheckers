@@ -188,9 +188,16 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const bot = game.setup.bot;
   const puzzle = game.setup.mode === 'puzzle' && game.setup.puzzleId ? puzzleById(game.setup.puzzleId) : undefined;
   const puzzleIndex = puzzle ? PUZZLES.findIndex((p) => p.id === puzzle.id) : -1;
-  const puzzleSolved = !!puzzle && state.status === 'won' && state.win?.player === puzzle.player;
+  const survive = puzzle?.goal === 'survive';
+  const puzzleSolved =
+    !!puzzle &&
+    (survive
+      ? state.status === 'playing' && humanTurn && game.movesUsed >= puzzle.within
+      : state.status === 'won' && state.win?.player === puzzle.player);
   const puzzleFailed =
-    !!puzzle && !puzzleSolved && (state.status !== 'playing' || (humanTurn && game.movesUsed >= puzzle.within));
+    !!puzzle &&
+    !puzzleSolved &&
+    (state.status !== 'playing' || (!survive && humanTurn && game.movesUsed >= puzzle.within));
   useEffect(() => {
     if (puzzleSolved && puzzle) markSolved(puzzle.id);
   }, [puzzleSolved, puzzle, markSolved]);
@@ -449,6 +456,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
       <PuzzleResultModal
         visible={!!puzzle && (puzzleSolved || puzzleFailed) && !resultDismissed}
         solved={puzzleSolved}
+        survived={survive}
         title={puzzle?.title ?? ''}
         hasNext={puzzleIndex >= 0 && puzzleIndex < PUZZLES.length - 1}
         onNext={() => {

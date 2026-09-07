@@ -7,6 +7,8 @@ import { Theme, radius, spacing } from './theme';
 interface Props {
   visible: boolean;
   solved: boolean;
+  /** The goal was to survive rather than to win. */
+  survived?: boolean;
   title: string;
   hasNext: boolean;
   onNext: () => void;
@@ -14,15 +16,15 @@ interface Props {
   onList: () => void;
 }
 
-export function PuzzleResultModal({ visible, solved, title, hasNext, onNext, onRetry, onList }: Props) {
+export function PuzzleResultModal({ visible, solved, survived, title, hasNext, onNext, onRetry, onList }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onList}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <Text style={[styles.title, { color: solved ? colors.success : colors.warning }]}>{solved ? 'Solved!' : 'Not quite'}</Text>
-          <Text style={styles.body}>{solved ? `${title}: done.` : `${title}: that didn't win in time. History can be rewritten, though.`}</Text>
+          <Text style={[styles.title, { color: solved ? colors.success : colors.warning }]}>{solved ? (survived ? 'Survived!' : 'Solved!') : 'Not quite'}</Text>
+          <Text style={styles.body}>{solved ? `${title}: done.` : survived ? `${title}: that lost. History can be rewritten, though.` : `${title}: that didn't win in time. History can be rewritten, though.`}</Text>
           <View style={{ height: spacing.lg }} />
           {solved && hasNext ? (
             <>
