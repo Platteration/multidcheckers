@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Board, PLAYER_NAMES, SIZE, index, isPlayable } from '../engine';
-import { colors, playerColor, radius } from './theme';
+import { Board, SIZE, index, isPlayable } from '../engine';
+import { Theme, radius } from './theme';
+import { useTheme } from '../app/theme';
 
 export interface Destination {
   square: number;
@@ -23,6 +24,8 @@ interface Props {
 
 /** The big playable board: 8x8 squares with pieces drawn as discs. */
 export function CheckerBoard({ board, cellSize, selected, destinations, marks, interactive, patterns, onPressSquare }: Props) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const rows: React.ReactNode[] = [];
   const pieceSize = Math.round(cellSize * 0.78);
   for (let r = SIZE - 1; r >= 0; r--) {
@@ -35,7 +38,7 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
       const marked = marks?.includes(sq) ?? false;
       const isSelected = selected === sq;
       const label = `${String.fromCharCode(97 + c)}${r + 1}${
-        piece ? `, ${PLAYER_NAMES[piece.player]} ${piece.king ? 'king' : 'man'}` : ''
+        piece ? `, ${colors.playerNames[piece.player]} ${piece.king ? 'king' : 'man'}` : ''
       }${dest ? (dest.capture ? ', jump here' : ', move here') : ''}`;
       cells.push(
         <Pressable
@@ -59,7 +62,7 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
                   width: pieceSize,
                   height: pieceSize,
                   borderRadius: pieceSize / 2,
-                  backgroundColor: playerColor(piece.player),
+                  backgroundColor: colors.players[piece.player],
                   borderColor: colors.playersEdge[piece.player],
                 },
                 isSelected && styles.selectedPiece,
@@ -106,7 +109,8 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
   return <View style={styles.board}>{rows}</View>;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Theme) =>
+  StyleSheet.create({
   board: {
     alignSelf: 'center',
     borderWidth: 3,

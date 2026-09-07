@@ -4,9 +4,9 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { keys, loadJson } from './src/app/persist';
 import { SettingsProvider, useSettings } from './src/app/settings';
+import { ThemeProvider, useTheme } from './src/app/theme';
 import type { GameState } from './src/engine';
 import { GameScreen } from './src/ui/GameScreen';
-import { colors } from './src/ui/theme';
 
 interface SavedGame {
   version: number;
@@ -20,6 +20,7 @@ function looksLikeSavedGame(v: unknown): v is SavedGame {
 
 function Root() {
   const { ready } = useSettings();
+  const colors = useTheme();
   const [saved, setSaved] = useState<GameState[] | null | undefined>(undefined);
 
   useEffect(() => {
@@ -33,16 +34,22 @@ function Root() {
       </View>
     );
   }
-  return <GameScreen initialHistory={saved ?? undefined} />;
+  return (
+    <>
+      <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+      <GameScreen initialHistory={saved ?? undefined} />
+    </>
+  );
 }
 
 export default function App() {
   return (
     <SettingsProvider>
-      <SafeAreaProvider>
-        <StatusBar style="light" />
-        <Root />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <Root />
+        </SafeAreaProvider>
+      </ThemeProvider>
     </SettingsProvider>
   );
 }

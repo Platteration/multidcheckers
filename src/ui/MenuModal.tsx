@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { Button } from './Modals';
-import { colors, radius, spacing } from './theme';
+import { Theme, radius, spacing } from './theme';
+import { useTheme } from '../app/theme';
 
 export interface MenuItem {
   label: string;
@@ -20,6 +21,8 @@ interface Props {
 
 /** The hamburger menu: rules, settings, extras, and a guarded "new game". */
 export function MenuModal({ visible, onClose, items, onNewGame, gameInProgress }: Props) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [confirming, setConfirming] = useState(false);
   const close = () => {
     setConfirming(false);
@@ -82,7 +85,8 @@ export function MenuModal({ visible, onClose, items, onNewGame, gameInProgress }
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Theme) =>
+  StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(5,6,20,0.85)', justifyContent: 'center', padding: spacing.lg },
   sheet: { backgroundColor: colors.panel, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   title: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: spacing.md },

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { GameState, PLAYER_NAMES, timelineLabel } from '../engine';
-import { colors, playerAccent, radius, spacing } from './theme';
+import { GameState, timelineLabel } from '../engine';
+import { Theme, radius, spacing } from './theme';
+import { useTheme } from '../app/theme';
 
 interface ButtonProps {
   label: string;
@@ -12,6 +13,8 @@ interface ButtonProps {
 }
 
 export function Button({ label, onPress, tone = 'ghost', disabled, small }: ButtonProps) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable
       onPress={onPress}
@@ -37,6 +40,8 @@ interface RulesProps {
 }
 
 export function RulesModal({ visible, onClose }: RulesProps) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
@@ -86,6 +91,8 @@ export function RulesModal({ visible, onClose }: RulesProps) {
 }
 
 function Rule({ head, children }: { head: string; children: React.ReactNode }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.ruleHead}>{head}</Text>
@@ -102,18 +109,20 @@ interface GameOverProps {
 }
 
 export function GameOverModal({ state, visible, onRestart, onDismiss }: GameOverProps) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const win = state.win;
-  const headline = win ? `${PLAYER_NAMES[win.player]} wins!` : "It's a draw";
+  const headline = win ? `${colors.playerNames[win.player]} wins!` : "It's a draw";
   const detail = win
     ? win.reason === 'captured'
-      ? `${PLAYER_NAMES[win.player === 0 ? 1 : 0]} has no pieces left on ${timelineLabel(win.board.timeline)}, turn ${win.board.turn}.`
-      : `${PLAYER_NAMES[win.player === 0 ? 1 : 0]} is trapped on ${timelineLabel(win.board.timeline)}, turn ${win.board.turn}: no legal move and nowhere to travel.`
+      ? `${colors.playerNames[win.player === 0 ? 1 : 0]} has no pieces left on ${timelineLabel(win.board.timeline)}, turn ${win.board.turn}.`
+      : `${colors.playerNames[win.player === 0 ? 1 : 0]} is trapped on ${timelineLabel(win.board.timeline)}, turn ${win.board.turn}: no legal move and nowhere to travel.`
     : 'Forty moves each without a capture, a crowning, or a time travel.';
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <Text style={[styles.title, win ? { color: playerAccent(win.player) } : null]}>{headline}</Text>
+          <Text style={[styles.title, win ? { color: colors.playerAccent[win.player] } : null]}>{headline}</Text>
           <Text style={styles.ruleBody}>{detail}</Text>
           <View style={{ height: spacing.lg }} />
           <Button label="New game" tone="primary" onPress={onRestart} />
@@ -125,7 +134,8 @@ export function GameOverModal({ state, visible, onRestart, onDismiss }: GameOver
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Theme) =>
+  StyleSheet.create({
   button: {
     paddingVertical: 12,
     paddingHorizontal: 18,

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { useSettings } from '../app/settings';
+import { ThemeChoice, useSettings } from '../app/settings';
 import { Button } from './Modals';
-import { colors, radius, spacing } from './theme';
+import { PIECE_SETS, SKINS, Theme, radius, spacing } from './theme';
+import { useTheme } from '../app/theme';
 
 interface Props {
   visible: boolean;
@@ -12,6 +13,8 @@ interface Props {
 }
 
 export function SettingsModal({ visible, onClose, children }: Props) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, update } = useSettings();
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -31,6 +34,32 @@ export function SettingsModal({ visible, onClose, children }: Props) {
               <Row label="Piece markings" hint="Shapes as well as colours, for colour-blind players.">
                 <Switch value={settings.patterns} onValueChange={(v) => update({ patterns: v })} />
               </Row>
+              <Row label="Theme">
+                <Choice<ThemeChoice>
+                  value={settings.theme}
+                  options={[
+                    { id: 'system', label: 'System' },
+                    { id: 'dark', label: 'Dark' },
+                    { id: 'light', label: 'Light' },
+                  ]}
+                  onChange={(v) => update({ theme: v })}
+                />
+              </Row>
+            </Section>
+            <Section title="Look">
+              <Text style={styles.label}>Board</Text>
+              <Choice
+                value={settings.skin}
+                options={SKINS.map((s) => ({ id: s.id, label: s.name, swatch: [s.squareLight, s.squareDark] as const }))}
+                onChange={(v) => update({ skin: v })}
+              />
+              <View style={{ height: spacing.sm }} />
+              <Text style={styles.label}>Pieces</Text>
+              <Choice
+                value={settings.pieces}
+                options={PIECE_SETS.map((p) => ({ id: p.id, label: p.name, swatch: p.colors }))}
+                onChange={(v) => update({ pieces: v })}
+              />
             </Section>
             {children}
           </ScrollView>
@@ -43,6 +72,8 @@ export function SettingsModal({ visible, onClose, children }: Props) {
 }
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.section}>{title}</Text>
@@ -52,6 +83,8 @@ export function Section({ title, children }: { title: string; children: React.Re
 }
 
 export function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.row}>
       <View style={{ flex: 1, marginRight: spacing.md }}>
@@ -64,7 +97,16 @@ export function Row({ label, hint, children }: { label: string; hint?: string; c
 }
 
 /** A horizontal set of mutually exclusive choices. */
-export function Choice<T extends string>({ value, options, onChange }: { value: T; options: ReadonlyArray<{ id: T; label: string }>; onChange: (v: T) => void }) {
+export interface ChoiceOption<T extends string> {
+  id: T;
+  label: string;
+  /** One or two colours shown as dots before the label. */
+  swatch?: readonly [string, string] | readonly string[];
+}
+
+export function Choice<T extends string>({ value, options, onChange }: { value: T; options: ReadonlyArray<ChoiceOption<T>>; onChange: (v: T) => void }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.choices}>
       {options.map((o) => (
@@ -75,6 +117,13 @@ export function Choice<T extends string>({ value, options, onChange }: { value: 
           accessibilityState={{ selected: o.id === value }}
           style={[styles.choice, o.id === value && styles.choiceOn]}
         >
+          {o.swatch ? (
+            <View style={{ flexDirection: 'row', marginRight: 6 }}>
+              {o.swatch.map((c, i) => (
+                <View key={i} style={[styles.swatch, { backgroundColor: c, marginLeft: i ? -4 : 0 }]} />
+              ))}
+            </View>
+          ) : null}
           <Text style={[styles.choiceText, o.id === value && styles.choiceTextOn]}>{o.label}</Text>
         </Pressable>
       ))}
@@ -82,7 +131,8 @@ export function Choice<T extends string>({ value, options, onChange }: { value: 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Theme) =>
+  StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(5,6,20,0.85)', justifyContent: 'center', padding: spacing.lg },
   sheet: { backgroundColor: colors.panel, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   title: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: spacing.md },
@@ -90,8 +140,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   label: { color: colors.text, fontSize: 15, fontWeight: '600' },
   hint: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  choice: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panelRaised },
+  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, flexShrink: 1, justifyContent: 'flex-end' },
+  choice: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panelRaised },
+  swatch: { width: 12, height: 12, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(0,0,0,0.35)' },
   choiceOn: { borderColor: colors.travel, backgroundColor: colors.travel },
   choiceText: { color: colors.text, fontSize: 12, fontWeight: '700' },
   choiceTextOn: { color: colors.background },

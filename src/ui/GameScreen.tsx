@@ -3,7 +3,6 @@ import { StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   GameState,
-  PLAYER_NAMES,
   SIZE,
   getBoard,
   getTimeline,
@@ -24,7 +23,8 @@ import { MenuModal } from './MenuModal';
 import { Button, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
 import { Row, Section, SettingsModal } from './SettingsModal';
-import { colors, playerAccent, radius, spacing } from './theme';
+import { Theme, radius, spacing } from './theme';
+import { useTheme } from '../app/theme';
 import { useGame } from './useGame';
 
 interface Props {
@@ -33,6 +33,8 @@ interface Props {
 }
 
 export function GameScreen({ initialHistory }: Props) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, setVariant } = useSettings();
   const rules = useMemo(
     () => ({ flyingKings: !!settings.variants.flyingKings, backCapture: !!settings.variants.backCapture }),
@@ -74,7 +76,7 @@ export function GameScreen({ initialHistory }: Props) {
   const pending = pendingTimelines(state);
   const totalWaiting = pending.length;
   const mover = state.toMove;
-  const accent = state.win ? playerAccent(state.win.player) : playerAccent(mover);
+  const accent = state.win ? colors.playerAccent[state.win.player] : colors.playerAccent[mover];
 
   const origin = selection.kind === 'none' ? null : latestRef(getTimeline(state, selection.from.timeline));
   const holdingHere = selection.kind === 'piece' && selection.from.timeline === focus.timeline && focusIsPending;
@@ -92,15 +94,15 @@ export function GameScreen({ initialHistory }: Props) {
 
   const status =
     state.status === 'won' && state.win
-      ? `${PLAYER_NAMES[state.win.player]} wins!`
+      ? `${colors.playerNames[state.win.player]} wins!`
       : state.status === 'draw'
         ? 'Draw - forty quiet moves each'
-        : `${PLAYER_NAMES[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
+        : `${colors.playerNames[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
 
   let boardTitle = `${timelineLabel(focus.timeline)} · turn ${focus.turn}`;
   if (focusIsPending) boardTitle += ' · now';
   else if (focus.turn === latestRef(timeline).turn) boardTitle += state.status === 'playing' ? ' · waiting on the other side' : ' · final';
-  else boardTitle += ` · past (${PLAYER_NAMES[playerToMoveAt(focus.turn)]} was to move)`;
+  else boardTitle += ` · past (${colors.playerNames[playerToMoveAt(focus.turn)]} was to move)`;
 
   let hint: string;
   if (state.status !== 'playing') {
@@ -175,9 +177,9 @@ export function GameScreen({ initialHistory }: Props) {
         <Text style={styles.mapLegend}>
           {state.status !== 'playing' ? null : selection.kind === 'none' ? (
             <>
-              <Text style={{ color: playerAccent(mover) }}>■</Text> waiting for {PLAYER_NAMES[mover]}
+              <Text style={{ color: colors.playerAccent[mover] }}>■</Text> waiting for {colors.playerNames[mover]}
               {'   '}
-              <Text style={{ color: playerAccent(otherPlayer(mover)) }}>t</Text> = {PLAYER_NAMES[otherPlayer(mover)]}'s turns
+              <Text style={{ color: colors.playerAccent[otherPlayer(mover)] }}>t</Text> = {colors.playerNames[otherPlayer(mover)]}'s turns
             </>
           ) : (
             <>
@@ -221,7 +223,8 @@ export function GameScreen({ initialHistory }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Theme) =>
+  StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
