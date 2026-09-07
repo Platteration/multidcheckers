@@ -4,27 +4,20 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { keys, loadJson } from './src/app/persist';
 import { SettingsProvider, useSettings } from './src/app/settings';
+import { GameSetup, looksLikeSavedGame, normaliseSaved } from './src/app/setup';
 import { ThemeProvider, useTheme } from './src/app/theme';
 import type { GameState } from './src/engine';
 import { GameScreen } from './src/ui/GameScreen';
 
-interface SavedGame {
-  version: number;
-  history: GameState[];
-}
-
-function looksLikeSavedGame(v: unknown): v is SavedGame {
-  const s = v as SavedGame;
-  return !!s && s.version === 1 && Array.isArray(s.history) && s.history.length > 0 && Array.isArray(s.history[0]?.timelines);
-}
+type Saved = { history: GameState[]; setup: GameSetup };
 
 function Root() {
   const { ready } = useSettings();
   const colors = useTheme();
-  const [saved, setSaved] = useState<GameState[] | null | undefined>(undefined);
+  const [saved, setSaved] = useState<Saved | null | undefined>(undefined);
 
   useEffect(() => {
-    loadJson<unknown>(keys.game).then((v) => setSaved(looksLikeSavedGame(v) ? v.history : null));
+    loadJson<unknown>(keys.game).then((v) => setSaved(looksLikeSavedGame(v) ? normaliseSaved(v) : null));
   }, []);
 
   if (!ready || saved === undefined) {
@@ -37,7 +30,7 @@ function Root() {
   return (
     <>
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
-      <GameScreen initialHistory={saved ?? undefined} />
+      <GameScreen initialHistory={saved?.history} initialSetup={saved?.setup} />
     </>
   );
 }

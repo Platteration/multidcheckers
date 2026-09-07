@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import * as feedback from '../app/feedback';
+import { DEFAULT_SETUP, GameSetup } from '../app/setup';
 import {
   Action,
   BoardRef,
@@ -38,6 +39,13 @@ export interface GameController {
   state: GameState;
   /** Every state so far, oldest first. Saved so a game survives closing the app. */
   history: GameState[];
+  setup: GameSetup;
+  /** True when a person, not the bot, is expected to act now. */
+  humanTurn: boolean;
+  /** Apply any action directly, e.g. one the bot chose. */
+  play: (action: Action) => void;
+  /** Throw the game away and start a new one with this setup. */
+  startNew: (setup: GameSetup) => void;
   focus: BoardRef;
   selection: Selection;
   targets: BoardRef[];
@@ -62,8 +70,9 @@ function firstPending(state: GameState): BoardRef | null {
   return p.length ? latestRef(p[0]) : null;
 }
 
-export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}): GameController {
+export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}, initialSetup: GameSetup = DEFAULT_SETUP): GameController {
   const [history, setHistory] = useState<GameState[]>(() => (initialHistory?.length ? initialHistory : [newGame(rules)]));
+  const [setup, setSetup] = useState<GameSetup>(initialSetup);
   const [focus, setFocus] = useState<BoardRef>(() => {
     const last = initialHistory?.[initialHistory.length - 1];
     return (last && (last.win?.board ?? firstPending(last))) || { timeline: 0, turn: 0 };
@@ -72,6 +81,7 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
   const [error, setError] = useState<string | null>(null);
 
   const state = history[history.length - 1];
+  const humanTurn = !(setup.mode === 'bot' && setup.bot && state.toMove === setup.bot.player && state.status === 'playing');
 
   const targets = useMemo(
     () => (selection.kind === 'none' ? [] : travelTargets(state, selection.from.timeline, selection.from.square)),
@@ -171,18 +181,31 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     if (history.length <= 1) return;
     setError(null);
     setSelection(NONE);
-    const next = history.slice(0, -1);
+    let next = history.slice(0, -1);
+    // Against a bot, rewind through its replies too, back to your own move.
+    if (setup.mode === 'bot' && setup.bot) {
+      const bot = setup.bot.player;
+      while (next.length > 1 && (next[next.length - 1].toMove === bot || next[next.length - 1].status !== 'playing')) {
+        next = next.slice(0, -1);
+      }
+    }
     const prev = next[next.length - 1];
     setHistory(next);
     setFocus(firstPending(prev) ?? { timeline: 0, turn: 0 });
-  }, [history]);
+  }, [history, setup]);
 
-  const restart = useCallback(() => {
-    setError(null);
-    setSelection(NONE);
-    setHistory([newGame(rules)]);
-    setFocus({ timeline: 0, turn: 0 });
-  }, [rules]);
+  const startNew = useCallback(
+    (nextSetup: GameSetup) => {
+      setError(null);
+      setSelection(NONE);
+      setSetup(nextSetup);
+      setHistory([newGame(rules)]);
+      setFocus({ timeline: 0, turn: 0 });
+    },
+    [rules],
+  );
+
+  const restart = useCallback(() => startNew(setup), [startNew, setup]);
 
   const goToWaitingBoard = useCallback(() => {
     const pending = firstPending(state);
@@ -199,6 +222,10 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
   return {
     state,
     history,
+    setup,
+    humanTurn,
+    play: commit,
+    startNew,
     focus,
     selection,
     targets,

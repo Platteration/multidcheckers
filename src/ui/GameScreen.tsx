@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  BOT_NAMES,
   GameState,
   SIZE,
+  chooseAction,
   getBoard,
   getTimeline,
   isPending,
@@ -18,8 +20,10 @@ import {
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
+import { GameSetup } from '../app/setup';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
+import { NewGameModal } from './NewGameModal';
 import { Button, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
 import { Row, Section, SettingsModal } from './SettingsModal';
@@ -30,9 +34,10 @@ import { useGame } from './useGame';
 interface Props {
   /** A saved game to resume, oldest state first. */
   initialHistory?: GameState[];
+  initialSetup?: GameSetup;
 }
 
-export function GameScreen({ initialHistory }: Props) {
+export function GameScreen({ initialHistory, initialSetup }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, setVariant } = useSettings();
@@ -40,12 +45,13 @@ export function GameScreen({ initialHistory }: Props) {
     () => ({ flyingKings: !!settings.variants.flyingKings, backCapture: !!settings.variants.backCapture }),
     [settings.variants.flyingKings, settings.variants.backCapture],
   );
-  const game = useGame(initialHistory, rules);
-  const { state, focus, selection, targets } = game;
+  const game = useGame(initialHistory, rules, initialSetup);
+  const { state, focus, selection, targets, humanTurn } = game;
   const { width, height } = useWindowDimensions();
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [newGameOpen, setNewGameOpen] = useState(false);
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
 
   useEffect(() => setHapticsEnabled(settings.haptics), [settings.haptics]);
@@ -54,11 +60,24 @@ export function GameScreen({ initialHistory }: Props) {
   // Save the game whenever it changes, a moment after the last change.
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (game.history.length > 1) void saveJson(keys.game, { version: 1, history: game.history });
+      if (game.history.length > 1) void saveJson(keys.game, { version: 2, history: game.history, setup: game.setup });
       else void removeKey(keys.game);
     }, 250);
     return () => clearTimeout(timer);
-  }, [game.history]);
+  }, [game.history, game.setup]);
+
+  // The bot's turn: one action at a time, with a beat between them so the
+  // person can follow what is happening across the boards.
+  const bot = game.setup.mode === 'bot' ? game.setup.bot : undefined;
+  useEffect(() => {
+    if (!bot || humanTurn || state.status !== 'playing') return;
+    const timer = setTimeout(() => {
+      const action = chooseAction(state, bot.level);
+      if (action) game.play(action);
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, bot, humanTurn]);
 
   useEffect(() => {
     if (state.status === 'playing') setGameOverDismissed(false);
@@ -97,8 +116,11 @@ export function GameScreen({ initialHistory }: Props) {
       ? `${colors.playerNames[state.win.player]} wins!`
       : state.status === 'draw'
         ? 'Draw - forty quiet moves each'
-        : `${colors.playerNames[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
+        : !humanTurn && bot
+          ? `${BOT_NAMES[bot.level]} is thinking…`
+          : `${colors.playerNames[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
 
+  const subtitle = bot ? `you vs ${BOT_NAMES[bot.level]} · you are ${colors.playerNames[bot.player === 0 ? 1 : 0]}` : 'with multiverse time travel';
   let boardTitle = `${timelineLabel(focus.timeline)} · turn ${focus.turn}`;
   if (focusIsPending) boardTitle += ' · now';
   else if (focus.turn === latestRef(timeline).turn) boardTitle += state.status === 'playing' ? ' · waiting on the other side' : ' · final';
@@ -117,6 +139,8 @@ export function GameScreen({ initialHistory }: Props) {
     } else {
       hint = selection.moves.length > 0 ? 'Tap a highlighted square to move.' : 'This piece has no moves and its square is taken on every past board.';
     }
+  } else if (!humanTurn) {
+    hint = 'The bot is taking its turn.';
   } else if (focusIsPending) {
     hint = game.mustCapture ? 'You have a jump available, and jumps are mandatory. Tap a piece.' : 'Tap one of your pieces to move it, or to send it into the past.';
   } else {
@@ -130,7 +154,9 @@ export function GameScreen({ initialHistory }: Props) {
           <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
             5D Checkers
           </Text>
-          <Text style={styles.subtitle}>with multiverse time travel</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
         </View>
         <Button label="Undo" small onPress={game.undo} disabled={!game.canUndo} />
         <View style={{ width: spacing.xs }} />
@@ -146,7 +172,7 @@ export function GameScreen({ initialHistory }: Props) {
       <CheckerBoard
         board={board}
         cellSize={cellSize}
-        interactive={state.status === 'playing' && focusIsPending}
+        interactive={humanTurn && state.status === 'playing' && focusIsPending}
         selected={holdingHere ? selection.from.square : null}
         destinations={destinations}
         marks={marks}
@@ -196,11 +222,20 @@ export function GameScreen({ initialHistory }: Props) {
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         gameInProgress={game.canUndo && state.status === 'playing'}
-        onNewGame={game.restart}
+        onNewGame={() => setNewGameOpen(true)}
         items={[
           { label: 'How to play', onPress: () => setRulesOpen(true) },
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
         ]}
+      />
+      <NewGameModal
+        visible={newGameOpen}
+        initial={game.setup}
+        onClose={() => setNewGameOpen(false)}
+        onStart={(setup) => {
+          setNewGameOpen(false);
+          game.startNew(setup);
+        }}
       />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)}>
         <Section title="Variants (apply to new games)">
@@ -216,7 +251,10 @@ export function GameScreen({ initialHistory }: Props) {
       <GameOverModal
         state={state}
         visible={state.status !== 'playing' && !gameOverDismissed}
-        onRestart={game.restart}
+        onRestart={() => {
+          setGameOverDismissed(true);
+          setNewGameOpen(true);
+        }}
         onDismiss={() => setGameOverDismissed(true)}
       />
     </SafeAreaView>
