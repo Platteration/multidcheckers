@@ -37,6 +37,41 @@ you cannot slip a piece in between your opponent's decisions. What you can do
 is stack extra material into an old position, open a second front your
 opponent must defend, or pull a doomed piece out of the present.
 
+## What's in the app
+
+- **Two ways to play alone or together.** Pass-and-play on one phone, or
+  against a bot at three levels: Novice (wanders, loves a crown), Tricky
+  (counts material after your best reply) and Paradox (also travels through
+  time). Undo rewinds through the bot's replies.
+- **Puzzles.** Four hand-made positions: a capture sweep, a king jumping
+  backwards, sealing an old board through time travel so the opponent is
+  trapped, and a flying-king chain. Progress is saved.
+- **Replay.** Step through any game move by move with a one-line narration.
+- **Play by message.** Share a game as a short code, paste it into any chat,
+  and the other person loads it, moves, and sends it back. No server.
+- **Rule variants.** Flying kings and backward captures for men, off by
+  default. Forty quiet moves each with no capture, crowning or travel is a
+  draw.
+- **Themes and looks.** System, dark or light theme; five board skins; four
+  piece sets that also rename the sides; colour-blind markings on pieces.
+- **Feel.** Haptics and short synthesized sounds, both switchable. Pieces
+  pop into place when they land.
+- **Saved automatically.** The game in progress, settings, and puzzle
+  progress survive closing the app.
+
+## Money, and what will never be for sale
+
+The app is built so it can sell one thing: a **Supporter pack** of cosmetics
+(the board skins and piece sets marked ✦, plus future puzzle packs). Nothing
+that changes the rules, the bots, or the outcome of a game will ever be sold,
+and there are no loot boxes.
+
+Until a billing library is wired in, `STORE_ENABLED` in
+`src/app/purchases.ts` is false and every extra is unlocked for everyone. To
+go live: implement `purchase` and `restore` in that file against your store
+SDK, persist the result, and set the flag to true. The Settings sheet and the
+Extras sheet already respect the entitlement.
+
 ## Running it
 
 ```sh
@@ -64,14 +99,22 @@ To produce store builds use [EAS Build](https://docs.expo.dev/build/introduction
 App.tsx                    entry: safe area + status bar + GameScreen
 src/engine/types.ts        players, board references, turn parity
 src/engine/board.ts        one checkers board: moves, jump chains, kings
-src/engine/multiverse.ts   timelines, pending boards, time travel, win checks
-src/engine/__tests__/      unit tests for the rules
-src/ui/useGame.ts          game controller hook: history/undo + selection flow
-src/ui/CheckerBoard.tsx    the big tappable board
+src/engine/multiverse.ts   timelines, pending boards, time travel, rules, win/draw
+src/engine/bot.ts          the three-level computer opponent
+src/engine/__tests__/      unit tests for the rules, bots, puzzles, and game codes
+src/puzzles/index.ts       the puzzle set (each verified by a test)
+src/app/settings.tsx       persisted settings (theme, skin, sound, variants)
+src/app/theme.tsx          resolves settings into the palette screens draw with
+src/app/persist.ts         AsyncStorage helpers; app/progress.tsx for puzzle progress
+src/app/share.ts           game codes for play by message (app/base64.ts)
+src/app/purchases.ts       the store seam; app/entitlements.tsx gates premium looks
+src/app/feedback.ts        haptics and sounds (app/sound.ts)
+src/ui/useGame.ts          game controller hook: history/undo, selection, bot turns
+src/ui/GameScreen.tsx      screen layout, status text, bot loop, replay
+src/ui/CheckerBoard.tsx    the big tappable board with the landing animation
 src/ui/MiniBoard.tsx       board thumbnails for the map
 src/ui/MultiverseMap.tsx   the timeline map (rows = timelines, columns = turns)
-src/ui/Modals.tsx          rules and game-over sheets, shared Button
-src/ui/GameScreen.tsx      screen layout and status text
+src/ui/*Modal.tsx          menu, rules, settings, new game, puzzles, share, extras
 ```
 
 The engine is pure TypeScript with no React dependency, so the rules can be

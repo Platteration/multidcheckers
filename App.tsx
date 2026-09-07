@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { EntitlementsProvider } from './src/app/entitlements';
 import { keys, loadJson } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
 import { SettingsProvider, useSettings } from './src/app/settings';
@@ -41,9 +42,11 @@ export default function App() {
     <SettingsProvider>
       <ThemeProvider>
         <ProgressProvider>
-          <SafeAreaProvider>
-            <Root />
-          </SafeAreaProvider>
+          <EntitlementsProvider>
+            <SafeAreaProvider>
+              <Root />
+            </SafeAreaProvider>
+          </EntitlementsProvider>
         </ProgressProvider>
       </ThemeProvider>
     </SettingsProvider>

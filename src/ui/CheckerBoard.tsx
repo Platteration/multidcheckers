@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Board, SIZE, index, isPlayable } from '../engine';
 import { Theme, radius } from './theme';
 import { useTheme } from '../app/theme';
@@ -19,11 +19,21 @@ interface Props {
   interactive: boolean;
   /** Draw a shape on each piece as well as its colour (colour-blind friendly). */
   patterns?: boolean;
+  /** The square a piece just landed on; it pops into place. */
+  landed?: number | null;
   onPressSquare?: (square: number) => void;
 }
 
 /** The big playable board: 8x8 squares with pieces drawn as discs. */
-export function CheckerBoard({ board, cellSize, selected, destinations, marks, interactive, patterns, onPressSquare }: Props) {
+export function CheckerBoard({ board, cellSize, selected, destinations, marks, interactive, patterns, landed, onPressSquare }: Props) {
+  const pop = useRef(new Animated.Value(1)).current;
+  const landKey = landed !== null && landed !== undefined ? `${landed}-${board.cells.filter((c) => c).length}` : null;
+  useEffect(() => {
+    if (landed === null || landed === undefined) return;
+    pop.setValue(1.35);
+    Animated.timing(pop, { toValue: 1, duration: 260, easing: Easing.out(Easing.back(2)), useNativeDriver: true }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landKey]);
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const rows: React.ReactNode[] = [];
@@ -55,9 +65,10 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
           ]}
         >
           {piece ? (
-            <View
+            <Animated.View
               style={[
                 styles.piece,
+                landed === sq ? { transform: [{ scale: pop }] } : null,
                 {
                   width: pieceSize,
                   height: pieceSize,
@@ -83,7 +94,7 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
                   }}
                 />
               ) : null}
-            </View>
+            </Animated.View>
           ) : dest ? (
             <View
               style={[

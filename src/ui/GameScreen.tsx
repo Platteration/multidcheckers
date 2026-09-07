@@ -29,6 +29,7 @@ import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
 import { NewGameModal } from './NewGameModal';
 import { PuzzleResultModal } from './PuzzleResultModal';
+import { ExtrasModal } from './ExtrasModal';
 import { PuzzlesModal } from './PuzzlesModal';
 import { ReplayBar } from './ReplayBar';
 import { ShareModal } from './ShareModal';
@@ -62,6 +63,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const focus = replaying ? (state.lastCreated[0] ?? { timeline: 0, turn: 0 }) : game.focus;
   const humanTurn = game.humanTurn && !replaying;
   const [shareOpen, setShareOpen] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
   const shareCode = useMemo(
     () => (game.history.length > 1 && game.setup.mode !== 'puzzle' ? encodeGame(game.history, game.setup) : null),
     [game.history, game.setup],
@@ -217,6 +219,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         selected={holdingHere ? selection.from.square : null}
         destinations={destinations}
         marks={marks}
+        landed={marks.length > 1 ? marks[marks.length - 1] : marks[0] ?? null}
         patterns={settings.patterns}
         onPressSquare={game.pressSquare}
       />
@@ -281,6 +284,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           { label: 'Puzzles', onPress: () => setPuzzlesOpen(true) },
           { label: 'How to play', onPress: () => setRulesOpen(true) },
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
+          { label: 'Extras', onPress: () => setExtrasOpen(true) },
         ]}
       />
       <NewGameModal
@@ -292,6 +296,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           game.startNew(setup);
         }}
       />
+      <ExtrasModal visible={extrasOpen} onClose={() => setExtrasOpen(false)} />
       <ShareModal
         visible={shareOpen}
         code={shareCode}

@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEntitlements } from '../app/entitlements';
 import { ThemeChoice, useSettings } from '../app/settings';
 import { Button } from './Modals';
 import { PIECE_SETS, SKINS, Theme, radius, spacing } from './theme';
@@ -16,6 +17,8 @@ export function SettingsModal({ visible, onClose, children }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, update } = useSettings();
+  const { owns } = useEntitlements();
+  const [locked, setLocked] = useState<string | null>(null);
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
@@ -50,16 +53,17 @@ export function SettingsModal({ visible, onClose, children }: Props) {
               <Text style={styles.label}>Board</Text>
               <Choice
                 value={settings.skin}
-                options={SKINS.map((s) => ({ id: s.id, label: s.name, swatch: [s.squareLight, s.squareDark] as const }))}
-                onChange={(v) => update({ skin: v })}
+                options={SKINS.map((s) => ({ id: s.id, label: s.premium && !owns(true) ? `✦ ${s.name}` : s.name, swatch: [s.squareLight, s.squareDark] as const }))}
+                onChange={(v) => (owns(!!SKINS.find((s) => s.id === v)?.premium) ? update({ skin: v }) : setLocked(v))}
               />
               <View style={{ height: spacing.sm }} />
               <Text style={styles.label}>Pieces</Text>
               <Choice
                 value={settings.pieces}
-                options={PIECE_SETS.map((p) => ({ id: p.id, label: p.name, swatch: p.colors }))}
-                onChange={(v) => update({ pieces: v })}
+                options={PIECE_SETS.map((p) => ({ id: p.id, label: p.premium && !owns(true) ? `✦ ${p.name}` : p.name, swatch: p.colors }))}
+                onChange={(v) => (owns(!!PIECE_SETS.find((p) => p.id === v)?.premium) ? update({ pieces: v }) : setLocked(v))}
               />
+              {locked ? <Text style={styles.hint}>✦ items come with the Supporter pack (see Extras in the menu).</Text> : null}
             </Section>
             {children}
           </ScrollView>
