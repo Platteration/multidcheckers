@@ -20,7 +20,9 @@ import {
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
+import { narrate } from '../app/narrate';
 import { useProgress } from '../app/progress';
+import { decodeGame, encodeGame } from '../app/share';
 import { GameSetup } from '../app/setup';
 import { PUZZLES, puzzleById } from '../puzzles';
 import { CheckerBoard, Destination } from './CheckerBoard';
@@ -28,6 +30,8 @@ import { MenuModal } from './MenuModal';
 import { NewGameModal } from './NewGameModal';
 import { PuzzleResultModal } from './PuzzleResultModal';
 import { PuzzlesModal } from './PuzzlesModal';
+import { ReplayBar } from './ReplayBar';
+import { ShareModal } from './ShareModal';
 import { Button, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
 import { Row, Section, SettingsModal } from './SettingsModal';
@@ -50,7 +54,18 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     [settings.variants.flyingKings, settings.variants.backCapture],
   );
   const game = useGame(initialHistory, rules, initialSetup);
-  const { state, focus, selection, targets, humanTurn } = game;
+  const { selection, targets } = game;
+  // Replay: look at any earlier state read-only, without touching the live game.
+  const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const replaying = replayIndex !== null && replayIndex < game.history.length;
+  const state = replaying ? game.history[replayIndex] : game.state;
+  const focus = replaying ? (state.lastCreated[0] ?? { timeline: 0, turn: 0 }) : game.focus;
+  const humanTurn = game.humanTurn && !replaying;
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareCode = useMemo(
+    () => (game.history.length > 1 && game.setup.mode !== 'puzzle' ? encodeGame(game.history, game.setup) : null),
+    [game.history, game.setup],
+  );
   const { width, height } = useWindowDimensions();
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -206,7 +221,16 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         onPressSquare={game.pressSquare}
       />
 
-      <View style={styles.hintRow}>
+      {replaying ? (
+        <ReplayBar
+          index={replayIndex}
+          count={game.history.length}
+          narration={narrate(state, colors.playerNames)}
+          onSeek={setReplayIndex}
+          onLive={() => setReplayIndex(null)}
+        />
+      ) : null}
+      <View style={[styles.hintRow, replaying && { display: 'none' }]}>
         <Text style={[styles.hint, game.error ? { color: colors.danger } : null]} numberOfLines={3}>
           {game.error ?? hint}
         </Text>
@@ -252,6 +276,8 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         gameInProgress={game.canUndo && state.status === 'playing'}
         onNewGame={() => setNewGameOpen(true)}
         items={[
+          ...(game.history.length > 1 ? [{ label: 'Replay this game', onPress: () => setReplayIndex(0) }] : []),
+          { label: 'Play by message', onPress: () => setShareOpen(true) },
           { label: 'Puzzles', onPress: () => setPuzzlesOpen(true) },
           { label: 'How to play', onPress: () => setRulesOpen(true) },
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
@@ -264,6 +290,22 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         onStart={(setup) => {
           setNewGameOpen(false);
           game.startNew(setup);
+        }}
+      />
+      <ShareModal
+        visible={shareOpen}
+        code={shareCode}
+        onClose={() => setShareOpen(false)}
+        onLoad={(code) => {
+          try {
+            const loaded = decodeGame(code);
+            game.load(loaded.history, loaded.setup);
+            setReplayIndex(null);
+            setShareOpen(false);
+            return null;
+          } catch (e) {
+            return e instanceof Error ? e.message : String(e);
+          }
         }}
       />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)}>
@@ -311,6 +353,10 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           setNewGameOpen(true);
         }}
         onDismiss={() => setGameOverDismissed(true)}
+        onReplay={() => {
+          setGameOverDismissed(true);
+          setReplayIndex(0);
+        }}
       />
     </SafeAreaView>
   );
