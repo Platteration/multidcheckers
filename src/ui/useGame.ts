@@ -6,6 +6,7 @@ import {
   GameState,
   IllegalAction,
   Move,
+  Rules,
   applyAction,
   getTimeline,
   isPending,
@@ -61,8 +62,8 @@ function firstPending(state: GameState): BoardRef | null {
   return p.length ? latestRef(p[0]) : null;
 }
 
-export function useGame(initialHistory?: GameState[]): GameController {
-  const [history, setHistory] = useState<GameState[]>(() => (initialHistory?.length ? initialHistory : [newGame()]));
+export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}): GameController {
+  const [history, setHistory] = useState<GameState[]>(() => (initialHistory?.length ? initialHistory : [newGame(rules)]));
   const [focus, setFocus] = useState<BoardRef>(() => {
     const last = initialHistory?.[initialHistory.length - 1];
     return (last && (last.win?.board ?? firstPending(last))) || { timeline: 0, turn: 0 };
@@ -138,7 +139,7 @@ export function useGame(initialHistory?: GameState[]): GameController {
           setSelection({
             kind: 'piece',
             from: { timeline: focus.timeline, square },
-            moves: movesForPiece(board, state.toMove, square),
+            moves: movesForPiece(board, state.toMove, square, state.rules),
           });
         }
         return;
@@ -179,9 +180,9 @@ export function useGame(initialHistory?: GameState[]): GameController {
   const restart = useCallback(() => {
     setError(null);
     setSelection(NONE);
-    setHistory([newGame()]);
+    setHistory([newGame(rules)]);
     setFocus({ timeline: 0, turn: 0 });
-  }, []);
+  }, [rules]);
 
   const goToWaitingBoard = useCallback(() => {
     const pending = firstPending(state);

@@ -139,3 +139,62 @@ describe('moves', () => {
     expect(pieceAt(placePiece(empty, index(7, 0), { player: 0, king: false })!, index(7, 0))).toEqual({ player: 0, king: true });
   });
 });
+
+describe('variants', () => {
+  const kingBoard = boardFromRows([
+    '........',
+    '........',
+    '........',
+    '........',
+    '...b....',
+    '........',
+    '.R......',
+    '........',
+  ]);
+
+  it('flying kings slide any distance and land anywhere beyond a capture', () => {
+    const plain = legalMoves(kingBoard, 0);
+    expect(plain.every((m) => m.captures.length === 0)).toBe(true);
+    const flying = legalMoves(kingBoard, 0, { flyingKings: true, backCapture: false });
+    // The king at b2 (1,1) sees the black man at d4 (3,3) and can land on e5, f6, g7 or h8.
+    expect(flying.every((m) => m.captures.length === 1)).toBe(true);
+    expect(flying.map(moveTarget).sort()).toEqual([index(4, 4), index(5, 5), index(6, 6), index(7, 7)].sort());
+  });
+
+  it('flying kings keep jumping from any landing square', () => {
+    const b = boardFromRows([
+      '........',
+      '........',
+      '.....b..',
+      '........',
+      '...b....',
+      '........',
+      '.R......',
+      '........',
+    ]);
+    const moves = legalMoves(b, 0, { flyingKings: true, backCapture: false });
+    // Landing on e5 blocks nothing: f6 is where the second man sits, so the
+    // king must land on e5 and then jump f6 to g7 or h8.
+    const double = moves.filter((m) => m.captures.length === 2);
+    expect(double.map(moveTarget).sort()).toEqual([index(6, 6), index(7, 7)].sort());
+  });
+
+  it('men capture backwards only with the variant on', () => {
+    const b = boardFromRows([
+      '........',
+      '........',
+      '........',
+      '........',
+      '..r.....',
+      '.b......',
+      '........',
+      '........',
+    ]);
+    // Red man at c4 (3,2), black man behind it at b3 (2,1).
+    expect(legalMoves(b, 0).every((m) => m.captures.length === 0)).toBe(true);
+    const back = legalMoves(b, 0, { flyingKings: false, backCapture: true });
+    expect(back).toHaveLength(1);
+    expect(back[0].captures).toEqual([index(2, 1)]);
+    expect(moveTarget(back[0])).toBe(index(1, 0));
+  });
+});

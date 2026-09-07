@@ -3,6 +3,7 @@ import {
   Action,
   GameState,
   IllegalAction,
+  QUIET_PLIES_FOR_DRAW,
   applyAction,
   getBoard,
   hasAnyAction,
@@ -215,5 +216,58 @@ describe('winning', () => {
     expect(hasAnyAction({ ...before, toMove: 1 }, 0)).toBe(false);
     expect(after.status).toBe('won');
     expect(after.win).toEqual({ player: 0, board: { timeline: 0, turn: 3 }, reason: 'trapped' });
+  });
+});
+
+describe('draws and rules', () => {
+  it('keeps rules on the state', () => {
+    expect(newGame().rules).toEqual({ flyingKings: false, backCapture: false });
+    expect(newGame({ flyingKings: true }).rules.flyingKings).toBe(true);
+  });
+
+  it('counts quiet plies and draws after enough of them', () => {
+    // Two kings far apart shuffle back and forth.
+    const kings = boardFromRows([
+      'B.......',
+      '........',
+      '........',
+      '........',
+      '........',
+      '........',
+      '........',
+      '.......R',
+    ]);
+    let g: GameState = {
+      ...newGame(),
+      timelines: [{ id: 0, startTurn: 0, boards: [initialBoard(), initialBoard(), kings], createdBy: null, branchedFrom: null, origin: null }],
+      toMove: 0,
+      quietPlies: QUIET_PLIES_FOR_DRAW - 2,
+    };
+    g = applyAction(g, step(0, index(0, 7), index(1, 6)));
+    expect(g.status).toBe('playing');
+    expect(g.quietPlies).toBe(QUIET_PLIES_FOR_DRAW - 1);
+    g = applyAction(g, step(0, index(7, 0), index(6, 1)));
+    expect(g.status).toBe('draw');
+  });
+
+  it('resets the quiet counter on a capture', () => {
+    const b = boardFromRows([
+      '........',
+      '........',
+      '........',
+      '........',
+      '........',
+      '...b....',
+      '..r.....',
+      '.......b',
+    ]);
+    const g: GameState = {
+      ...newGame(),
+      timelines: [{ id: 0, startTurn: 0, boards: [initialBoard(), initialBoard(), b], createdBy: null, branchedFrom: null, origin: null }],
+      toMove: 0,
+      quietPlies: 30,
+    };
+    const after = applyAction(g, { type: 'move', timeline: 0, move: { from: index(1, 2), path: [index(3, 4)], captures: [index(2, 3)] } });
+    expect(after.quietPlies).toBe(0);
   });
 });

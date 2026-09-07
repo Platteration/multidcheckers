@@ -11,6 +11,16 @@ import type { Player } from './types';
 export const SIZE = 8;
 export const ROWS_OF_PIECES = 3;
 
+/** Optional rule variants, fixed for the whole game. */
+export interface Rules {
+  /** Kings slide any distance and may land anywhere beyond a captured piece. */
+  flyingKings: boolean;
+  /** Men may capture backwards as well as forwards. */
+  backCapture: boolean;
+}
+
+export const DEFAULT_RULES: Rules = { flyingKings: false, backCapture: false };
+
 export interface Piece {
   readonly player: Player;
   readonly king: boolean;
@@ -95,20 +105,24 @@ export function moveTarget(move: Move): number {
   return move.path[move.path.length - 1];
 }
 
-function directionsFor(piece: Piece): ReadonlyArray<readonly [number, number]> {
-  if (piece.king) return [[1, -1], [1, 1], [-1, -1], [-1, 1]];
+const ALL_DIAGONALS: ReadonlyArray<readonly [number, number]> = [[1, -1], [1, 1], [-1, -1], [-1, 1]];
+
+function directionsFor(piece: Piece, capturing: boolean, rules: Rules): ReadonlyArray<readonly [number, number]> {
+  if (piece.king || (capturing && rules.backCapture)) return ALL_DIAGONALS;
   const dr = piece.player === 0 ? 1 : -1;
   return [[dr, -1], [dr, 1]];
 }
 
-function simpleMoves(board: Board, from: number, piece: Piece): Move[] {
+function simpleMoves(board: Board, from: number, piece: Piece, rules: Rules): Move[] {
   const out: Move[] = [];
   const r = rowOf(from);
   const c = colOf(from);
-  for (const [dr, dc] of directionsFor(piece)) {
-    const rr = r + dr;
-    const cc = c + dc;
-    if (inBounds(rr, cc) && board.cells[index(rr, cc)] === null) {
+  const reach = piece.king && rules.flyingKings ? SIZE : 1;
+  for (const [dr, dc] of directionsFor(piece, false, rules)) {
+    for (let step = 1; step <= reach; step++) {
+      const rr = r + dr * step;
+      const cc = c + dc * step;
+      if (!inBounds(rr, cc) || board.cells[index(rr, cc)] !== null) break;
       out.push({ from, path: [index(rr, cc)], captures: [] });
     }
   }
@@ -120,30 +134,41 @@ function simpleMoves(board: Board, from: number, piece: Piece): Move[] {
  * jumping while a jump is available; reaching the crown row as a man ends
  * the chain (the piece is crowned and stops).
  */
-function captureChains(board: Board, from: number, piece: Piece): Move[] {
+function captureChains(board: Board, from: number, piece: Piece, rules: Rules): Move[] {
   const out: Move[] = [];
+  const flying = piece.king && rules.flyingKings;
+  const isFree = (sq: number, path: number[]) => (board.cells[sq] === null || sq === from) && !path.includes(sq);
   const visit = (at: number, path: number[], captured: number[]) => {
     const r = rowOf(at);
     const c = colOf(at);
     let extended = false;
     const crownedMidway = !piece.king && path.length > 0 && r === crownRow(piece.player);
     if (!crownedMidway) {
-      for (const [dr, dc] of directionsFor(piece)) {
-        const midR = r + dr;
-        const midC = c + dc;
-        const landR = r + dr * 2;
-        const landC = c + dc * 2;
-        if (!inBounds(landR, landC)) continue;
+      for (const [dr, dc] of directionsFor(piece, true, rules)) {
+        // Walk along the diagonal to the first piece; a flying king may
+        // cross empty squares first, an ordinary piece must jump an adjacent one.
+        let step = 1;
+        if (flying) {
+          while (inBounds(r + dr * step, c + dc * step) && isFree(index(r + dr * step, c + dc * step), path)) step++;
+        }
+        const midR = r + dr * step;
+        const midC = c + dc * step;
+        if (!inBounds(midR, midC)) continue;
         const mid = index(midR, midC);
-        const land = index(landR, landC);
         const victim = board.cells[mid];
         if (!victim || victim.player === piece.player || captured.includes(mid)) continue;
-        // The landing square must be empty, except that a king may circle
-        // back through its own starting square during a long chain.
-        if (board.cells[land] !== null && land !== from) continue;
-        if (path.includes(land)) continue;
-        extended = true;
-        visit(land, [...path, land], [...captured, mid]);
+        // Landing squares: exactly one beyond for ordinary pieces, any run of
+        // empty squares beyond for flying kings. A king may circle back
+        // through its own starting square during a long chain.
+        let landStep = step + 1;
+        while (inBounds(r + dr * landStep, c + dc * landStep)) {
+          const land = index(r + dr * landStep, c + dc * landStep);
+          if (!isFree(land, path)) break;
+          extended = true;
+          visit(land, [...path, land], [...captured, mid]);
+          if (!flying) break;
+          landStep++;
+        }
       }
     }
     if (!extended && path.length > 0) out.push({ from, path, captures: captured });
@@ -153,28 +178,28 @@ function captureChains(board: Board, from: number, piece: Piece): Move[] {
 }
 
 /** Legal moves for one piece, ignoring the must-capture rule. */
-export function rawMovesForPiece(board: Board, from: number): Move[] {
+export function rawMovesForPiece(board: Board, from: number, rules: Rules = DEFAULT_RULES): Move[] {
   const piece = board.cells[from];
   if (!piece) return [];
-  const captures = captureChains(board, from, piece);
-  return captures.length ? captures : simpleMoves(board, from, piece);
+  const captures = captureChains(board, from, piece, rules);
+  return captures.length ? captures : simpleMoves(board, from, piece, rules);
 }
 
 /**
  * All legal moves for a player. Capturing is mandatory: when any piece can
  * jump, only jumps are legal.
  */
-export function legalMoves(board: Board, player: Player): Move[] {
+export function legalMoves(board: Board, player: Player, rules: Rules = DEFAULT_RULES): Move[] {
   const all: Move[] = [];
   for (const from of piecesOf(board, player)) {
-    all.push(...rawMovesForPiece(board, from));
+    all.push(...rawMovesForPiece(board, from, rules));
   }
   const captures = all.filter((m) => m.captures.length > 0);
   return captures.length ? captures : all;
 }
 
-export function movesForPiece(board: Board, player: Player, from: number): Move[] {
-  return legalMoves(board, player).filter((m) => m.from === from);
+export function movesForPiece(board: Board, player: Player, from: number, rules: Rules = DEFAULT_RULES): Move[] {
+  return legalMoves(board, player, rules).filter((m) => m.from === from);
 }
 
 export function applyMove(board: Board, move: Move): Board {

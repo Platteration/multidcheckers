@@ -13,11 +13,17 @@
  *    board branches into a brand-new timeline.
  *  - You win the moment your opponent has no pieces left on any board, or
  *    has a board waiting for them with nothing they can do on it.
+ *  - Forty moves by each side with no capture, crowning, or time travel is
+ *    a draw, so two kings can't chase each other forever.
  */
 import {
   Board,
+  DEFAULT_RULES,
   Move,
+  Rules,
   applyMove,
+  crownRow,
+  rowOf,
   countPieces,
   initialBoard,
   legalMoves,
@@ -42,7 +48,10 @@ export interface Timeline {
   origin: BoardRef | null;
 }
 
-export type Status = 'playing' | 'won';
+export type Status = 'playing' | 'won' | 'draw';
+
+/** Plies (one move by one player) without progress before the game is drawn. */
+export const QUIET_PLIES_FOR_DRAW = 80;
 
 export interface WinInfo {
   player: Player;
@@ -55,10 +64,13 @@ export type Action =
   | { type: 'travel'; from: { timeline: number; square: number }; to: BoardRef };
 
 export interface GameState {
+  rules: Rules;
   timelines: Timeline[];
   toMove: Player;
   status: Status;
   win: WinInfo | null;
+  /** Consecutive plies with no capture, crowning, or time travel. */
+  quietPlies: number;
   /** Number of completed full turns (both players moved). Just for display. */
   round: number;
   lastAction: Action | null;
@@ -66,8 +78,10 @@ export interface GameState {
   lastCreated: BoardRef[];
 }
 
-export function newGame(): GameState {
+export function newGame(rules: Partial<Rules> = {}): GameState {
   return {
+    rules: { ...DEFAULT_RULES, ...rules },
+    quietPlies: 0,
     timelines: [
       {
         id: 0,
@@ -169,7 +183,7 @@ export function isTravelTarget(state: GameState, fromTimeline: number, square: n
 export function legalMovesOn(state: GameState, timeline: number): Move[] {
   const tl = state.timelines[timeline];
   if (!tl) return [];
-  return legalMoves(latestBoard(tl), state.toMove);
+  return legalMoves(latestBoard(tl), state.toMove, state.rules);
 }
 
 /** True when the player to move can do anything at all on this timeline. */
@@ -205,16 +219,21 @@ export function applyAction(state: GameState, action: Action): GameState {
   const me = state.toMove;
   const timelines = state.timelines.map((tl) => ({ ...tl, boards: tl.boards.slice() }));
   const created: BoardRef[] = [];
+  let quietPlies = 0;
 
   if (action.type === 'move') {
     const tl = assertPending(state, action.timeline);
-    const legal = legalMoves(latestBoard(tl), me);
+    const board = latestBoard(tl);
+    const legal = legalMoves(board, me, state.rules);
     if (!legal.some((m) => sameMove(m, action.move))) {
       const mustCapture = legal.some((m) => m.captures.length > 0) && action.move.captures.length === 0;
       throw new IllegalAction(mustCapture ? 'you must capture when you can' : 'that move is not legal');
     }
-    timelines[tl.id].boards.push(applyMove(latestBoard(tl), action.move));
+    timelines[tl.id].boards.push(applyMove(board, action.move));
     created.push(latestRef(timelines[tl.id]));
+    const mover = pieceAt(board, action.move.from)!;
+    const crowned = !mover.king && rowOf(moveTarget(action.move)) === crownRow(me);
+    quietPlies = action.move.captures.length > 0 || crowned ? 0 : state.quietPlies + 1;
   } else {
     const from = assertPending(state, action.from.timeline);
     const originBoard = latestBoard(from);
@@ -247,6 +266,7 @@ export function applyAction(state: GameState, action: Action): GameState {
   const next: GameState = {
     ...state,
     timelines,
+    quietPlies,
     lastAction: action,
     lastCreated: created,
   };
@@ -265,6 +285,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
   }
 
+  if (quietPlies >= QUIET_PLIES_FOR_DRAW) return { ...next, status: 'draw' };
   return resolveTurn(next);
 }
 

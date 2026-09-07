@@ -69,6 +69,10 @@ export function RulesModal({ visible, onClose }: RulesProps) {
               On your turn you must make one move on every board marked "play". Only then does the
               turn pass. More timelines means more to keep track of, for both of you.
             </Rule>
+            <Rule head="Variants.">
+              In Settings you can turn on flying kings (they slide any distance) and backward
+              captures for men. They apply to the next new game.
+            </Rule>
             <Rule head="Winning.">
               Wipe your opponent off any single board, or leave them a waiting board where they have
               no legal move and nowhere to travel, and you win the whole game.
@@ -99,12 +103,12 @@ interface GameOverProps {
 
 export function GameOverModal({ state, visible, onRestart, onDismiss }: GameOverProps) {
   const win = state.win;
-  const headline = win ? `${PLAYER_NAMES[win.player]} wins!` : 'Game over';
+  const headline = win ? `${PLAYER_NAMES[win.player]} wins!` : "It's a draw";
   const detail = win
     ? win.reason === 'captured'
       ? `${PLAYER_NAMES[win.player === 0 ? 1 : 0]} has no pieces left on ${timelineLabel(win.board.timeline)}, turn ${win.board.turn}.`
       : `${PLAYER_NAMES[win.player === 0 ? 1 : 0]} is trapped on ${timelineLabel(win.board.timeline)}, turn ${win.board.turn}: no legal move and nowhere to travel.`
-    : '';
+    : 'Forty moves each without a capture, a crowning, or a time travel.';
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>

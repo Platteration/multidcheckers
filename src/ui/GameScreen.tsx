@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   GameState,
@@ -16,14 +16,14 @@ import {
   sameRef,
   timelineLabel,
 } from '../engine';
-import { setHapticsEnabled } from '../app/feedback';
+import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
 import { Button, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
-import { SettingsModal } from './SettingsModal';
+import { Row, Section, SettingsModal } from './SettingsModal';
 import { colors, playerAccent, radius, spacing } from './theme';
 import { useGame } from './useGame';
 
@@ -33,16 +33,21 @@ interface Props {
 }
 
 export function GameScreen({ initialHistory }: Props) {
-  const game = useGame(initialHistory);
+  const { settings, setVariant } = useSettings();
+  const rules = useMemo(
+    () => ({ flyingKings: !!settings.variants.flyingKings, backCapture: !!settings.variants.backCapture }),
+    [settings.variants.flyingKings, settings.variants.backCapture],
+  );
+  const game = useGame(initialHistory, rules);
   const { state, focus, selection, targets } = game;
   const { width, height } = useWindowDimensions();
-  const { settings } = useSettings();
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
 
   useEffect(() => setHapticsEnabled(settings.haptics), [settings.haptics]);
+  useEffect(() => setSoundEnabled(settings.sound), [settings.sound]);
 
   // Save the game whenever it changes, a moment after the last change.
   useEffect(() => {
@@ -88,7 +93,9 @@ export function GameScreen({ initialHistory }: Props) {
   const status =
     state.status === 'won' && state.win
       ? `${PLAYER_NAMES[state.win.player]} wins!`
-      : `${PLAYER_NAMES[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
+      : state.status === 'draw'
+        ? 'Draw - forty quiet moves each'
+        : `${PLAYER_NAMES[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
 
   let boardTitle = `${timelineLabel(focus.timeline)} · turn ${focus.turn}`;
   if (focusIsPending) boardTitle += ' · now';
@@ -193,7 +200,16 @@ export function GameScreen({ initialHistory }: Props) {
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
         ]}
       />
-      <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)}>
+        <Section title="Variants (apply to new games)">
+          <Row label="Flying kings" hint="Kings slide any distance and land anywhere beyond a capture.">
+            <Switch value={!!settings.variants.flyingKings} onValueChange={(v) => setVariant('flyingKings', v)} />
+          </Row>
+          <Row label="Backward captures" hint="Men may jump backwards as well as forwards.">
+            <Switch value={!!settings.variants.backCapture} onValueChange={(v) => setVariant('backCapture', v)} />
+          </Row>
+        </Section>
+      </SettingsModal>
       <RulesModal visible={rulesOpen} onClose={() => setRulesOpen(false)} />
       <GameOverModal
         state={state}

@@ -1,18 +1,22 @@
 /**
- * Haptic feedback, guarded by the user's setting and by platform support.
- * Sound lives in ./sound.
+ * Haptic and audio feedback, guarded by the user's settings and by platform
+ * support. Each function names a moment in the game, not a device effect,
+ * so screens don't need to know which cue is which.
  */
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import { playSound, setSoundEnabled } from './sound';
 
-let enabled = true;
+let hapticsOn = true;
 
 export function setHapticsEnabled(on: boolean): void {
-  enabled = on;
+  hapticsOn = on;
 }
 
-async function run(fn: () => Promise<void>): Promise<void> {
-  if (!enabled || Platform.OS === 'web') return;
+export { setSoundEnabled };
+
+async function haptic(fn: () => Promise<void>): Promise<void> {
+  if (!hapticsOn || Platform.OS === 'web') return;
   try {
     await fn();
   } catch {
@@ -22,23 +26,34 @@ async function run(fn: () => Promise<void>): Promise<void> {
 
 /** A light tick: selecting or placing something. */
 export function tap(): void {
-  void run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+  playSound('tap');
+  void haptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
 }
 
-/** A heavier thud: a disc lands, a piece is captured, the board spins. */
+/** A heavier thud: a disc lands, a piece is captured. */
 export function thud(): void {
-  void run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy));
+  playSound('thud');
+  void haptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy));
 }
 
-/** Something notable happened: a time travel branched a new timeline. */
+/** The board turns. */
+export function spin(): void {
+  playSound('spin');
+  void haptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+}
+
+/** A time travel branched a new timeline. */
 export function warp(): void {
-  void run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
+  playSound('warp');
+  void haptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
 }
 
 export function win(): void {
-  void run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+  playSound('win');
+  void haptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
 }
 
 export function nope(): void {
-  void run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
+  playSound('nope');
+  void haptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
 }
