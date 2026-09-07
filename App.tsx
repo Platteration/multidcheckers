@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { keys, loadJson } from './src/app/persist';
+import { ProgressProvider } from './src/app/progress';
 import { SettingsProvider, useSettings } from './src/app/settings';
 import { GameSetup, looksLikeSavedGame, normaliseSaved } from './src/app/setup';
 import { ThemeProvider, useTheme } from './src/app/theme';
@@ -39,9 +40,11 @@ export default function App() {
   return (
     <SettingsProvider>
       <ThemeProvider>
-        <SafeAreaProvider>
-          <Root />
-        </SafeAreaProvider>
+        <ProgressProvider>
+          <SafeAreaProvider>
+            <Root />
+          </SafeAreaProvider>
+        </ProgressProvider>
       </ThemeProvider>
     </SettingsProvider>
   );

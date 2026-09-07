@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import * as feedback from '../app/feedback';
 import { DEFAULT_SETUP, GameSetup } from '../app/setup';
+import { Puzzle, puzzleById } from '../puzzles';
 import {
   Action,
   BoardRef,
@@ -9,6 +10,7 @@ import {
   Move,
   Rules,
   applyAction,
+  otherPlayer,
   getTimeline,
   isPending,
   isTravelTarget,
@@ -46,6 +48,10 @@ export interface GameController {
   play: (action: Action) => void;
   /** Throw the game away and start a new one with this setup. */
   startNew: (setup: GameSetup) => void;
+  /** Load a puzzle position; the strongest bot answers for the other side. */
+  startPuzzle: (puzzle: Puzzle) => void;
+  /** In puzzle mode, how many of the player's own actions have been used. */
+  movesUsed: number;
   focus: BoardRef;
   selection: Selection;
   targets: BoardRef[];
@@ -81,7 +87,13 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
   const [error, setError] = useState<string | null>(null);
 
   const state = history[history.length - 1];
-  const humanTurn = !(setup.mode === 'bot' && setup.bot && state.toMove === setup.bot.player && state.status === 'playing');
+  const humanTurn = !(setup.bot && state.toMove === setup.bot.player && state.status === 'playing');
+  const movesUsed = useMemo(() => {
+    if (setup.mode !== 'puzzle' || setup.player === undefined) return 0;
+    let n = 0;
+    for (let i = 1; i < history.length; i++) if (history[i - 1].toMove === setup.player) n++;
+    return n;
+  }, [history, setup]);
 
   const targets = useMemo(
     () => (selection.kind === 'none' ? [] : travelTargets(state, selection.from.timeline, selection.from.square)),
@@ -183,7 +195,7 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     setSelection(NONE);
     let next = history.slice(0, -1);
     // Against a bot, rewind through its replies too, back to your own move.
-    if (setup.mode === 'bot' && setup.bot) {
+    if (setup.bot) {
       const bot = setup.bot.player;
       while (next.length > 1 && (next[next.length - 1].toMove === bot || next[next.length - 1].status !== 'playing')) {
         next = next.slice(0, -1);
@@ -205,7 +217,25 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     [rules],
   );
 
-  const restart = useCallback(() => startNew(setup), [startNew, setup]);
+  const startPuzzle = useCallback((puzzle: Puzzle) => {
+    setError(null);
+    setSelection(NONE);
+    setSetup({
+      mode: 'puzzle',
+      puzzleId: puzzle.id,
+      within: puzzle.within,
+      player: puzzle.player,
+      bot: { level: 3, player: otherPlayer(puzzle.player) },
+    });
+    setHistory([puzzle.state]);
+    setFocus(firstPending(puzzle.state) ?? { timeline: 0, turn: 0 });
+  }, []);
+
+  const restart = useCallback(() => {
+    const puzzle = setup.mode === 'puzzle' && setup.puzzleId ? puzzleById(setup.puzzleId) : undefined;
+    if (puzzle) startPuzzle(puzzle);
+    else startNew(setup);
+  }, [startNew, startPuzzle, setup]);
 
   const goToWaitingBoard = useCallback(() => {
     const pending = firstPending(state);
@@ -226,6 +256,8 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     humanTurn,
     play: commit,
     startNew,
+    startPuzzle,
+    movesUsed,
     focus,
     selection,
     targets,

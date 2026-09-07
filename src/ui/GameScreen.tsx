@@ -20,10 +20,14 @@ import {
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
+import { useProgress } from '../app/progress';
 import { GameSetup } from '../app/setup';
+import { PUZZLES, puzzleById } from '../puzzles';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
 import { NewGameModal } from './NewGameModal';
+import { PuzzleResultModal } from './PuzzleResultModal';
+import { PuzzlesModal } from './PuzzlesModal';
 import { Button, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
 import { Row, Section, SettingsModal } from './SettingsModal';
@@ -52,6 +56,10 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [newGameOpen, setNewGameOpen] = useState(false);
+  const [puzzlesOpen, setPuzzlesOpen] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [resultDismissed, setResultDismissed] = useState(false);
+  const { markSolved } = useProgress();
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
 
   useEffect(() => setHapticsEnabled(settings.haptics), [settings.haptics]);
@@ -68,7 +76,19 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
 
   // The bot's turn: one action at a time, with a beat between them so the
   // person can follow what is happening across the boards.
-  const bot = game.setup.mode === 'bot' ? game.setup.bot : undefined;
+  const bot = game.setup.bot;
+  const puzzle = game.setup.mode === 'puzzle' && game.setup.puzzleId ? puzzleById(game.setup.puzzleId) : undefined;
+  const puzzleIndex = puzzle ? PUZZLES.findIndex((p) => p.id === puzzle.id) : -1;
+  const puzzleSolved = !!puzzle && state.status === 'won' && state.win?.player === puzzle.player;
+  const puzzleFailed =
+    !!puzzle && !puzzleSolved && (state.status !== 'playing' || (humanTurn && game.movesUsed >= puzzle.within));
+  useEffect(() => {
+    if (puzzleSolved && puzzle) markSolved(puzzle.id);
+  }, [puzzleSolved, puzzle, markSolved]);
+  useEffect(() => {
+    setResultDismissed(false);
+    setShowHint(false);
+  }, [game.setup.puzzleId, game.history.length === 1]);
   useEffect(() => {
     if (!bot || humanTurn || state.status !== 'playing') return;
     const timer = setTimeout(() => {
@@ -120,14 +140,20 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           ? `${BOT_NAMES[bot.level]} is thinking…`
           : `${colors.playerNames[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
 
-  const subtitle = bot ? `you vs ${BOT_NAMES[bot.level]} · you are ${colors.playerNames[bot.player === 0 ? 1 : 0]}` : 'with multiverse time travel';
+  const subtitle = puzzle
+    ? `Puzzle ${puzzleIndex + 1}: ${puzzle.title} · ${Math.max(0, puzzle.within - game.movesUsed)} move${puzzle.within - game.movesUsed === 1 ? '' : 's'} left`
+    : bot
+      ? `you vs ${BOT_NAMES[bot.level]} · you are ${colors.playerNames[bot.player === 0 ? 1 : 0]}`
+      : 'with multiverse time travel';
   let boardTitle = `${timelineLabel(focus.timeline)} · turn ${focus.turn}`;
   if (focusIsPending) boardTitle += ' · now';
   else if (focus.turn === latestRef(timeline).turn) boardTitle += state.status === 'playing' ? ' · waiting on the other side' : ' · final';
   else boardTitle += ` · past (${colors.playerNames[playerToMoveAt(focus.turn)]} was to move)`;
 
   let hint: string;
-  if (state.status !== 'playing') {
+  if (puzzle && state.status === 'playing' && humanTurn && selection.kind === 'none') {
+    hint = showHint ? puzzle.hint : puzzle.brief;
+  } else if (state.status !== 'playing') {
     hint = 'Game over. Tap any board on the map to look around, or start a new game.';
   } else if (selection.kind === 'piece') {
     if (!holdingHere) {
@@ -184,7 +210,9 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         <Text style={[styles.hint, game.error ? { color: colors.danger } : null]} numberOfLines={3}>
           {game.error ?? hint}
         </Text>
-        {selection.kind !== 'none' ? (
+        {puzzle && selection.kind === 'none' && humanTurn && state.status === 'playing' ? (
+          <Button label={showHint ? 'Brief' : 'Hint'} small onPress={() => setShowHint((h) => !h)} />
+        ) : selection.kind !== 'none' ? (
           <Button label="Cancel" small onPress={game.cancel} />
         ) : !focusIsPending && state.status === 'playing' ? (
           <Button label="Go play" small tone="primary" onPress={game.goToWaitingBoard} />
@@ -224,6 +252,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         gameInProgress={game.canUndo && state.status === 'playing'}
         onNewGame={() => setNewGameOpen(true)}
         items={[
+          { label: 'Puzzles', onPress: () => setPuzzlesOpen(true) },
           { label: 'How to play', onPress: () => setRulesOpen(true) },
           { label: 'Settings', onPress: () => setSettingsOpen(true) },
         ]}
@@ -248,9 +277,35 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         </Section>
       </SettingsModal>
       <RulesModal visible={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <PuzzlesModal
+        visible={puzzlesOpen}
+        onClose={() => setPuzzlesOpen(false)}
+        onPick={(p) => {
+          setPuzzlesOpen(false);
+          game.startPuzzle(p);
+        }}
+      />
+      <PuzzleResultModal
+        visible={!!puzzle && (puzzleSolved || puzzleFailed) && !resultDismissed}
+        solved={puzzleSolved}
+        title={puzzle?.title ?? ''}
+        hasNext={puzzleIndex >= 0 && puzzleIndex < PUZZLES.length - 1}
+        onNext={() => {
+          setResultDismissed(true);
+          game.startPuzzle(PUZZLES[puzzleIndex + 1]);
+        }}
+        onRetry={() => {
+          setResultDismissed(true);
+          game.restart();
+        }}
+        onList={() => {
+          setResultDismissed(true);
+          setPuzzlesOpen(true);
+        }}
+      />
       <GameOverModal
         state={state}
-        visible={state.status !== 'playing' && !gameOverDismissed}
+        visible={!puzzle && state.status !== 'playing' && !gameOverDismissed}
         onRestart={() => {
           setGameOverDismissed(true);
           setNewGameOpen(true);
