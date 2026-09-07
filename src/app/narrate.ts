@@ -8,6 +8,7 @@ function squareName(sq: number): string {
 export function narrate(state: GameState, names: readonly [string, string]): string {
   const a = state.lastAction;
   const created = state.lastCreated[0];
+  if (a?.type === 'endTurn') return `${names[state.toMove === 0 ? 1 : 0]} ended the turn, leaving boards ahead of the present for later.`;
   if (!a || !created) return 'The beginning. One board, one timeline.';
   const who = names[playerToMoveAt(created.turn - 1)];
   let text: string;

@@ -13,7 +13,9 @@ import {
   Action,
   GameState,
   applyAction,
+  canEndTurn,
   latestBoard,
+  mandatoryTimelines,
   pendingTimelines,
   travelTargets,
 } from './multiverse';
@@ -96,6 +98,8 @@ const MAX_CANDIDATES = 60;
 
 export function chooseAction(state: GameState, level: BotLevel, rng: Rng = Math.random): Action | null {
   const me = state.toMove;
+  // Under the strict-present rule, bots play what they must and leave the rest for later.
+  if (canEndTurn(state) && mandatoryTimelines(state).length === 0) return { type: 'endTurn' };
   let actions = enumerateActions(state, level);
   if (actions.length === 0) return null;
   if (actions.length > MAX_CANDIDATES) {

@@ -4,6 +4,7 @@ import {
   BoardRef,
   GameState,
   latestTurn,
+  mandatoryTimelines,
   maxTurn,
   playerToMoveAt,
   sameRef,
@@ -39,6 +40,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
   const lastTurn = maxTurn(state);
   const width = (lastTurn + 2) * SLOT;
   const holding = origin !== null;
+  const mandatoryIds = useMemo(() => new Set(mandatoryTimelines(state).map((t) => t.id)), [state]);
   const horizontal = useRef<ScrollView>(null);
   const vertical = useRef<ScrollView>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -144,7 +146,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
                   badge = 'GO';
                 } else if (isPending) {
                   ring = colors.playerAccent[state.toMove];
-                  badge = holding ? null : 'play';
+                  badge = holding ? null : mandatoryIds.has(tl.id) ? 'play' : 'later';
                 } else if (isNew) {
                   badge = 'new';
                 }

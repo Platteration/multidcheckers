@@ -1,4 +1,5 @@
 import {
+  DEFAULT_RULES,
   applyMove,
   boardFromRows,
   countPieces,
@@ -155,7 +156,7 @@ describe('variants', () => {
   it('flying kings slide any distance and land anywhere beyond a capture', () => {
     const plain = legalMoves(kingBoard, 0);
     expect(plain.every((m) => m.captures.length === 0)).toBe(true);
-    const flying = legalMoves(kingBoard, 0, { flyingKings: true, backCapture: false });
+    const flying = legalMoves(kingBoard, 0, { ...DEFAULT_RULES, flyingKings: true });
     // The king at b2 (1,1) sees the black man at d4 (3,3) and can land on e5, f6, g7 or h8.
     expect(flying.every((m) => m.captures.length === 1)).toBe(true);
     expect(flying.map(moveTarget).sort()).toEqual([index(4, 4), index(5, 5), index(6, 6), index(7, 7)].sort());
@@ -172,7 +173,7 @@ describe('variants', () => {
       '.R......',
       '........',
     ]);
-    const moves = legalMoves(b, 0, { flyingKings: true, backCapture: false });
+    const moves = legalMoves(b, 0, { ...DEFAULT_RULES, flyingKings: true });
     // Landing on e5 blocks nothing: f6 is where the second man sits, so the
     // king must land on e5 and then jump f6 to g7 or h8.
     const double = moves.filter((m) => m.captures.length === 2);
@@ -192,7 +193,7 @@ describe('variants', () => {
     ]);
     // Red man at c4 (3,2), black man behind it at b3 (2,1).
     expect(legalMoves(b, 0).every((m) => m.captures.length === 0)).toBe(true);
-    const back = legalMoves(b, 0, { flyingKings: false, backCapture: true });
+    const back = legalMoves(b, 0, { ...DEFAULT_RULES, backCapture: true });
     expect(back).toHaveLength(1);
     expect(back[0].captures).toEqual([index(2, 1)]);
     expect(moveTarget(back[0])).toBe(index(1, 0));

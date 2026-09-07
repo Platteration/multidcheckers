@@ -50,7 +50,9 @@ opponent must defend, or pull a doomed piece out of the present.
 - **Replay.** Step through any game move by move with a one-line narration.
 - **Play by message.** Share a game as a short code, paste it into any chat,
   and the other person loads it, moves, and sends it back. No server.
-- **Rule variants.** Flying kings and backward captures for men, off by
+- **Rule variants.** Flying kings, backward captures for men, and strict
+  present, the real 5D Chess rule: only boards at the present must be played,
+  boards ahead of it are optional, and you end your turn yourself. All off by
   default. Forty quiet moves each with no capture, crowning or travel is a
   draw.
 - **Themes and looks.** System, dark or light theme; five board skins; four

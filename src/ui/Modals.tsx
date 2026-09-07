@@ -75,8 +75,10 @@ export function RulesModal({ visible, onClose }: RulesProps) {
               turn pass. More timelines means more to keep track of, for both of you.
             </Rule>
             <Rule head="Variants.">
-              In Settings you can turn on flying kings (they slide any distance) and backward
-              captures for men. They apply to the next new game.
+              In Settings you can turn on flying kings (they slide any distance), backward captures
+              for men, and "strict present", the real 5D Chess rule: only boards at the present, the
+              earliest "now" anywhere, must be played; boards ahead of it are optional, and you end
+              your turn yourself. They apply to the next new game.
             </Rule>
             <Rule head="Winning.">
               Wipe your opponent off any single board, or leave them a waiting board where they have

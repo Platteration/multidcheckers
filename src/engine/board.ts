@@ -17,9 +17,11 @@ export interface Rules {
   flyingKings: boolean;
   /** Men may capture backwards as well as forwards. */
   backCapture: boolean;
+  /** Only boards at the present are mandatory; the turn ends explicitly. */
+  strictPresent: boolean;
 }
 
-export const DEFAULT_RULES: Rules = { flyingKings: false, backCapture: false };
+export const DEFAULT_RULES: Rules = { flyingKings: false, backCapture: false, strictPresent: false };
 
 export interface Piece {
   readonly player: Player;

@@ -10,6 +10,8 @@ import {
   Move,
   Rules,
   applyAction,
+  canEndTurn,
+  mandatoryTimelines,
   otherPlayer,
   getTimeline,
   isPending,
@@ -59,6 +61,9 @@ export interface GameController {
   targets: BoardRef[];
   /** True when the current player has a jump available on the focused board. */
   mustCapture: boolean;
+  /** Strict present rule: the present boards are done and boards ahead may be left for later. */
+  canEndTurn: boolean;
+  endTurn: () => void;
   error: string | null;
   canUndo: boolean;
   focusBoard: (ref: BoardRef) => void;
@@ -74,6 +79,8 @@ export interface GameController {
 const NONE: Selection = { kind: 'none' };
 
 function firstPending(state: GameState): BoardRef | null {
+  const must = mandatoryTimelines(state);
+  if (must.length) return latestRef(must[0]);
   const p = pendingTimelines(state);
   return p.length ? latestRef(p[0]) : null;
 }
@@ -119,7 +126,7 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
           setFocus(next.win.board);
         } else {
           if (action.type === 'travel') feedback.warp();
-          else if (action.move.captures.length > 0) feedback.thud();
+          else if (action.type === 'move' && action.move.captures.length > 0) feedback.thud();
           else feedback.tap();
           const created = next.lastCreated.find((r) => r.timeline === focus.timeline);
           const pending = firstPending(next);
@@ -182,6 +189,11 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     },
     [state, focus, selection, commit],
   );
+
+  const endTurn = useCallback(() => {
+    if (selection.kind !== 'none') return;
+    commit({ type: 'endTurn' });
+  }, [selection, commit]);
 
   const cancel = useCallback(() => {
     setError(null);
@@ -274,6 +286,8 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     selection,
     targets,
     mustCapture,
+    canEndTurn: selection.kind === 'none' && canEndTurn(state),
+    endTurn,
     error,
     canUndo: history.length > 1,
     focusBoard,

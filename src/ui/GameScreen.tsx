@@ -14,6 +14,8 @@ import {
   getTimeline,
   isPending,
   latestRef,
+  mandatoryTimelines,
+  optionalTimelines,
   moveTarget,
   otherPlayer,
   pendingTimelines,
@@ -21,6 +23,7 @@ import {
   sameRef,
   timelineLabel,
 } from '../engine';
+import { useEntitlements } from '../app/entitlements';
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
@@ -60,10 +63,15 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, setVariant, update: updateSettings } = useSettings();
   const { recordGame } = useStats();
+  const { entitlements } = useEntitlements();
   const [statsOpen, setStatsOpen] = useState(false);
   const rules = useMemo(
-    () => ({ flyingKings: !!settings.variants.flyingKings, backCapture: !!settings.variants.backCapture }),
-    [settings.variants.flyingKings, settings.variants.backCapture],
+    () => ({
+      flyingKings: !!settings.variants.flyingKings,
+      backCapture: !!settings.variants.backCapture,
+      strictPresent: !!settings.variants.strictPresent,
+    }),
+    [settings.variants.flyingKings, settings.variants.backCapture, settings.variants.strictPresent],
   );
   const game = useGame(initialHistory, rules, initialSetup);
   const { selection, targets } = game;
@@ -234,7 +242,9 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const timeline = getTimeline(state, focus.timeline);
   const focusIsPending = isPending(state, focus);
   const pending = pendingTimelines(state);
-  const totalWaiting = pending.length;
+  const mandatory = mandatoryTimelines(state);
+  const optionalCount = optionalTimelines(state).length;
+  const totalWaiting = mandatory.length;
   const mover = state.toMove;
   const accent = state.win ? colors.playerAccent[state.win.player] : colors.playerAccent[mover];
 
@@ -249,7 +259,8 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     const a = state.lastAction;
     if (!a || !state.lastCreated.some((r) => sameRef(r, focus))) return [];
     if (a.type === 'move') return focus.timeline === a.timeline ? [a.move.from, ...a.move.path] : [];
-    return [a.from.square];
+    if (a.type === 'travel') return [a.from.square];
+    return [];
   }, [state.lastAction, state.lastCreated, focus]);
 
   const status =
@@ -259,7 +270,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         ? 'Draw - forty quiet moves each'
         : !humanTurn && bot
           ? `${BOT_NAMES[bot.level]} is thinking…`
-          : `${colors.playerNames[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting`;
+          : `${colors.playerNames[mover]} to move · ${totalWaiting} board${totalWaiting === 1 ? '' : 's'} waiting${optionalCount ? ` · ${optionalCount} optional` : ''}`;
 
   const subtitle = puzzle
     ? `Puzzle ${puzzleIndex + 1}: ${puzzle.title} · ${Math.max(0, puzzle.within - game.movesUsed)} move${puzzle.within - game.movesUsed === 1 ? '' : 's'} left`
@@ -288,6 +299,8 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     }
   } else if (!humanTurn) {
     hint = 'The bot is taking its turn.';
+  } else if (game.canEndTurn) {
+    hint = 'Every board at the present is played. Play the boards ahead of it too, or end your turn.';
   } else if (focusIsPending) {
     hint = game.mustCapture ? 'You have a jump available, and jumps are mandatory. Tap a piece.' : 'Tap one of your pieces to move it, or to send it into the past.';
   } else {
@@ -299,7 +312,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
-            5D Checkers
+            5D Checkers{entitlements.supporter ? ' ✦' : ''}
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
             {subtitle}
@@ -347,6 +360,8 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           <Button label={showHint ? 'Brief' : 'Hint'} small onPress={() => setShowHint((h) => !h)} />
         ) : selection.kind !== 'none' ? (
           <Button label="Cancel" small onPress={game.cancel} />
+        ) : game.canEndTurn && humanTurn ? (
+          <Button label="End turn" small tone="primary" onPress={game.endTurn} />
         ) : !focusIsPending && state.status === 'playing' ? (
           <Button label="Go play" small tone="primary" onPress={game.goToWaitingBoard} />
         ) : null}
@@ -441,6 +456,9 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           </Row>
           <Row label="Backward captures" hint="Men may jump backwards as well as forwards.">
             <Switch value={!!settings.variants.backCapture} onValueChange={(v) => setVariant('backCapture', v)} />
+          </Row>
+          <Row label="Strict present (5D rules)" hint="Only boards at the present must be played; boards ahead are optional and you end your turn yourself.">
+            <Switch value={!!settings.variants.strictPresent} onValueChange={(v) => setVariant('strictPresent', v)} />
           </Row>
         </Section>
       </SettingsModal>

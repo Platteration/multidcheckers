@@ -1,11 +1,16 @@
 import { boardFromRows, index, initialBoard, legalMoves, pieceAt } from '../board';
+import { chooseAction } from '../bot';
 import {
   Action,
   GameState,
   IllegalAction,
   QUIET_PLIES_FOR_DRAW,
   applyAction,
+  canEndTurn,
   getBoard,
+  mandatoryTimelines,
+  optionalTimelines,
+  presentTurn,
   hasAnyAction,
   latestTurn,
   newGame,
@@ -221,7 +226,7 @@ describe('winning', () => {
 
 describe('draws and rules', () => {
   it('keeps rules on the state', () => {
-    expect(newGame().rules).toEqual({ flyingKings: false, backCapture: false });
+    expect(newGame().rules).toEqual({ flyingKings: false, backCapture: false, strictPresent: false });
     expect(newGame({ flyingKings: true }).rules.flyingKings).toBe(true);
   });
 
@@ -269,5 +274,46 @@ describe('draws and rules', () => {
     };
     const after = applyAction(g, { type: 'move', timeline: 0, move: { from: index(1, 2), path: [index(3, 4)], captures: [index(2, 3)] } });
     expect(after.quietPlies).toBe(0);
+  });
+});
+
+describe('strict present rule', () => {
+  const opening = [
+    step(0, index(2, 1), index(3, 0)),
+    step(0, index(5, 6), index(4, 7)),
+    step(0, index(2, 3), index(3, 2)),
+    step(0, index(5, 4), index(4, 5)),
+  ];
+
+  it('makes only present boards mandatory after a travel into the past', () => {
+    let g = play(newGame({ strictPresent: true }), ...opening);
+    g = applyAction(g, { type: 'travel', from: { timeline: 0, square: index(3, 2) }, to: { timeline: 0, turn: 0 } });
+    expect(g.toMove).toBe(1);
+    expect(presentTurn(g)).toBe(1);
+    expect(mandatoryTimelines(g).map((t) => t.id)).toEqual([1]);
+    expect(optionalTimelines(g).map((t) => t.id)).toEqual([0]);
+    expect(() => applyAction(g, { type: 'endTurn' })).toThrow(IllegalAction);
+    g = applyAction(g, step(1, index(5, 0), index(4, 1)));
+    expect(canEndTurn(g)).toBe(true);
+    g = applyAction(g, { type: 'endTurn' });
+    expect(g.toMove).toBe(0);
+    expect(mandatoryTimelines(g).map((t) => t.id)).toEqual([1]);
+  });
+
+  it('stays legal across random strict games with bots', () => {
+    let seed = 5;
+    const rng = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+    for (let game = 0; game < 3; game++) {
+      let g = newGame({ strictPresent: true });
+      let plies = 0;
+      while (g.status === 'playing' && plies++ < 120) {
+        const a = chooseAction(g, 3, rng)!;
+        expect(() => (g = applyAction(g, a))).not.toThrow();
+        if (g.status === 'playing' && !canEndTurn(g)) expect(presentTurn(g) % 2).toBe(g.toMove);
+      }
+    }
   });
 });
