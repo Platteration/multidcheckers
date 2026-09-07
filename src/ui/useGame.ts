@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import * as feedback from '../app/feedback';
 import {
   Action,
   BoardRef,
@@ -34,6 +35,8 @@ export type Selection = { kind: 'none' } | { kind: 'piece'; from: PieceRef; move
 
 export interface GameController {
   state: GameState;
+  /** Every state so far, oldest first. Saved so a game survives closing the app. */
+  history: GameState[];
   focus: BoardRef;
   selection: Selection;
   targets: BoardRef[];
@@ -47,6 +50,8 @@ export interface GameController {
   undo: () => void;
   restart: () => void;
   goToWaitingBoard: () => void;
+  /** Cycle focus through the boards still waiting for the current player. */
+  nextWaitingBoard: () => void;
 }
 
 const NONE: Selection = { kind: 'none' };
@@ -56,9 +61,12 @@ function firstPending(state: GameState): BoardRef | null {
   return p.length ? latestRef(p[0]) : null;
 }
 
-export function useGame(): GameController {
-  const [history, setHistory] = useState<GameState[]>(() => [newGame()]);
-  const [focus, setFocus] = useState<BoardRef>({ timeline: 0, turn: 0 });
+export function useGame(initialHistory?: GameState[]): GameController {
+  const [history, setHistory] = useState<GameState[]>(() => (initialHistory?.length ? initialHistory : [newGame()]));
+  const [focus, setFocus] = useState<BoardRef>(() => {
+    const last = initialHistory?.[initialHistory.length - 1];
+    return (last && (last.win?.board ?? firstPending(last))) || { timeline: 0, turn: 0 };
+  });
   const [selection, setSelection] = useState<Selection>(NONE);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,14 +90,19 @@ export function useGame(): GameController {
         setSelection(NONE);
         setError(null);
         if (next.status === 'won' && next.win) {
+          feedback.win();
           setFocus(next.win.board);
         } else {
+          if (action.type === 'travel') feedback.warp();
+          else if (action.move.captures.length > 0) feedback.thud();
+          else feedback.tap();
           const created = next.lastCreated.find((r) => r.timeline === focus.timeline);
           const pending = firstPending(next);
           if (pending) setFocus(pending);
           else if (created) setFocus(created);
         }
       } catch (e) {
+        feedback.nope();
         setError(e instanceof IllegalAction ? e.message : String(e));
       }
     },
@@ -121,6 +134,7 @@ export function useGame(): GameController {
         if (selection.kind === 'piece' && selection.from.square === square && selection.from.timeline === focus.timeline) {
           setSelection(NONE);
         } else {
+          feedback.tap();
           setSelection({
             kind: 'piece',
             from: { timeline: focus.timeline, square },
@@ -174,8 +188,16 @@ export function useGame(): GameController {
     if (pending) setFocus(pending);
   }, [state]);
 
+  const nextWaitingBoard = useCallback(() => {
+    const pending = pendingTimelines(state);
+    if (pending.length === 0) return;
+    const at = pending.findIndex((tl) => tl.id === focus.timeline);
+    setFocus(latestRef(pending[(at + 1) % pending.length]));
+  }, [state, focus.timeline]);
+
   return {
     state,
+    history,
     focus,
     selection,
     targets,
@@ -188,5 +210,6 @@ export function useGame(): GameController {
     undo,
     restart,
     goToWaitingBoard,
+    nextWaitingBoard,
   };
 }

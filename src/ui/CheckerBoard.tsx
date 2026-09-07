@@ -16,11 +16,13 @@ interface Props {
   /** Squares to tint, e.g. where the last move came from and went to. */
   marks?: readonly number[];
   interactive: boolean;
+  /** Draw a shape on each piece as well as its colour (colour-blind friendly). */
+  patterns?: boolean;
   onPressSquare?: (square: number) => void;
 }
 
 /** The big playable board: 8x8 squares with pieces drawn as discs. */
-export function CheckerBoard({ board, cellSize, selected, destinations, marks, interactive, onPressSquare }: Props) {
+export function CheckerBoard({ board, cellSize, selected, destinations, marks, interactive, patterns, onPressSquare }: Props) {
   const rows: React.ReactNode[] = [];
   const pieceSize = Math.round(cellSize * 0.78);
   for (let r = SIZE - 1; r >= 0; r--) {
@@ -65,6 +67,18 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
             >
               {piece.king ? (
                 <Text style={[styles.crown, { fontSize: pieceSize * 0.55, color: colors.playersInk[piece.player] }]}>♛</Text>
+              ) : patterns ? (
+                <View
+                  style={{
+                    width: pieceSize * 0.34,
+                    height: pieceSize * 0.34,
+                    borderRadius: pieceSize * 0.17,
+                    backgroundColor: piece.player === 0 ? colors.playersInk[0] : 'transparent',
+                    borderWidth: piece.player === 1 ? Math.max(2, pieceSize * 0.07) : 0,
+                    borderColor: colors.playersInk[1],
+                    opacity: 0.85,
+                  }}
+                />
               ) : null}
             </View>
           ) : dest ? (
