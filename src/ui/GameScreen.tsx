@@ -14,6 +14,7 @@ import {
   getTimeline,
   isPending,
   latestRef,
+  latestRefIn,
   mandatoryTimelines,
   optionalTimelines,
   moveTarget,
@@ -27,12 +28,12 @@ import { useEntitlements } from '../app/entitlements';
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
-import { codeFromUrl, webLinkFor } from '../app/links';
+import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
 import { narrate } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
 import { decodeGame, encodeGame } from '../app/share';
-import { GameSetup } from '../app/setup';
+import { GameSetup, botShouldAct, savePayload } from '../app/setup';
 import { PUZZLES, puzzleById } from '../puzzles';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
@@ -45,7 +46,7 @@ import { StatsModal } from './StatsModal';
 import { WelcomeModal } from './WelcomeModal';
 import { MiniBoard } from './MiniBoard';
 import { ShareModal } from './ShareModal';
-import { Button, GameOverModal, RulesModal } from './Modals';
+import { Button, ConfirmModal, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
 import { Row, Section, SettingsModal } from './SettingsModal';
 import { Theme, radius, spacing } from './theme';
@@ -105,18 +106,34 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
       return e instanceof Error ? e.message : String(e);
     }
   };
-  const loadCodeRef = useRef(loadCode);
-  loadCodeRef.current = loadCode;
+  // A link arrives without warning, so it may not throw a game away unasked.
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [linkProblem, setLinkProblem] = useState<string | null>(null);
+  const acceptCode = (code: string) => {
+    const problem = loadCode(code);
+    setLinkProblem(problem);
+    if (!problem) clearCodeFromUrl();
+  };
+  const acceptCodeRef = useRef(acceptCode);
+  acceptCodeRef.current = acceptCode;
+  const hasGameToLoseRef = useRef(false);
+  hasGameToLoseRef.current = game.history.length > 1;
+  const arriveCode = (code: string) => {
+    if (hasGameToLoseRef.current) setLinkCode(code);
+    else acceptCodeRef.current(code);
+  };
+  const arriveCodeRef = useRef(arriveCode);
+  arriveCodeRef.current = arriveCode;
   useEffect(() => {
     Linking.getInitialURL()
       .then((url) => {
         const code = codeFromUrl(url);
-        if (code) loadCodeRef.current(code);
+        if (code) arriveCodeRef.current(code);
       })
       .catch(() => {});
     const sub = Linking.addEventListener('url', ({ url }) => {
       const code = codeFromUrl(url);
-      if (code) loadCodeRef.current(code);
+      if (code) arriveCodeRef.current(code);
     });
     return () => sub.remove();
   }, []);
@@ -182,11 +199,18 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   useEffect(() => setHapticsEnabled(settings.haptics), [settings.haptics]);
   useEffect(() => setSoundEnabled(settings.sound), [settings.sound]);
 
-  // Save the game whenever it changes, a moment after the last change.
+  // Save the game whenever it changes, a moment after the last change. Only the
+  // actions are written: the states share their boards in memory but JSON does
+  // not, so writing the history costs megabytes by the hundredth move.
+  const [saveFailed, setSaveFailed] = useState(false);
   useEffect(() => {
+    const payload = savePayload(game.history, game.setup);
     const timer = setTimeout(() => {
-      if (game.history.length > 1) void saveJson(keys.game, { version: 2, history: game.history, setup: game.setup });
-      else void removeKey(keys.game);
+      if (payload) void saveJson(keys.game, payload).then((ok) => setSaveFailed(!ok));
+      else {
+        setSaveFailed(false);
+        void removeKey(keys.game);
+      }
     }, 250);
     return () => clearTimeout(timer);
   }, [game.history, game.setup]);
@@ -213,19 +237,27 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     setResultDismissed(false);
     setShowHint(false);
   }, [game.setup.puzzleId, game.history.length === 1]);
+  // The bot plays the LIVE game, never the state being replayed.
+  const [botStuck, setBotStuck] = useState(false);
   useEffect(() => {
-    if (!bot || humanTurn || state.status !== 'playing') return;
+    setBotStuck(false);
+    const live = game.state;
+    if (!bot || !botShouldAct(game.setup, live, replaying)) return;
     const timer = setTimeout(() => {
-      const action = chooseAction(state, bot.level);
+      const action = chooseAction(live, bot.level);
       if (action) game.play(action);
+      else setBotStuck(true);
     }, 600);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, bot, humanTurn]);
+  }, [game.state, game.setup, bot, replaying]);
 
   useEffect(() => {
     if (state.status === 'playing') setGameOverDismissed(false);
   }, [state.status]);
+
+  // A rejected link is worth one message, not a permanent one.
+  useEffect(() => setLinkProblem(null), [game.history]);
 
   // Wide screens (tablets, phones on their side) put the map beside the board.
   const landscape = width > height * 1.15;
@@ -248,8 +280,11 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const mover = state.toMove;
   const accent = state.win ? colors.playerAccent[state.win.player] : colors.playerAccent[mover];
 
-  const origin = selection.kind === 'none' ? null : latestRef(getTimeline(state, selection.from.timeline));
-  const holdingHere = selection.kind === 'piece' && selection.from.timeline === focus.timeline && focusIsPending;
+  // The selection belongs to the live game; a replayed state may not have that
+  // timeline yet, so nothing about it is read while replaying.
+  const origin = replaying || selection.kind === 'none' ? null : latestRefIn(state, selection.from.timeline);
+  const holdingHere =
+    !replaying && selection.kind === 'piece' && selection.from.timeline === focus.timeline && focusIsPending;
   const destinations: Destination[] = holdingHere
     ? selection.moves.map((m) => ({ square: moveTarget(m), capture: m.captures.length > 0 }))
     : [];
@@ -298,7 +333,9 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
       hint = selection.moves.length > 0 ? 'Tap a highlighted square to move.' : 'This piece has no moves and its square is taken on every past board.';
     }
   } else if (!humanTurn) {
-    hint = 'The bot is taking its turn.';
+    hint = botStuck
+      ? `${bot ? BOT_NAMES[bot.level] : 'The bot'} has no action it can take here. Undo, or start a new game.`
+      : 'The bot is taking its turn.';
   } else if (game.canEndTurn) {
     hint = 'Every board at the present is played. Play the boards ahead of it too, or end your turn.';
   } else if (focusIsPending) {
@@ -353,8 +390,10 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         />
       ) : null}
       <View style={[styles.hintRow, replaying && { display: 'none' }]}>
-        <Text style={[styles.hint, game.error ? { color: colors.danger } : null]} numberOfLines={3}>
-          {game.error ?? hint}
+        <Text style={[styles.hint, game.error || linkProblem || saveFailed ? { color: colors.danger } : null]} numberOfLines={3}>
+          {game.error ??
+            linkProblem ??
+            (saveFailed ? 'This device would not save the game, so it will not survive closing the app.' : hint)}
         </Text>
         {puzzle && selection.kind === 'none' && humanTurn && state.status === 'playing' ? (
           <Button label={showHint ? 'Brief' : 'Hint'} small onPress={() => setShowHint((h) => !h)} />
@@ -409,7 +448,17 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         gameInProgress={game.canUndo && state.status === 'playing'}
         onNewGame={() => setNewGameOpen(true)}
         items={[
-          ...(game.history.length > 1 ? [{ label: 'Replay this game', onPress: () => setReplayIndex(0) }] : []),
+          ...(game.history.length > 1
+            ? [
+                {
+                  label: 'Replay this game',
+                  onPress: () => {
+                    game.cancel();
+                    setReplayIndex(0);
+                  },
+                },
+              ]
+            : []),
           { label: 'Play by message', onPress: () => setShareOpen(true) },
           { label: 'Puzzles', onPress: () => setPuzzlesOpen(true) },
           { label: 'How to play', onPress: () => setRulesOpen(true) },
@@ -490,6 +539,22 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           setPuzzlesOpen(true);
         }}
       />
+      <ConfirmModal
+        visible={linkCode !== null}
+        title="Load the game from this link?"
+        body="The game in progress will be lost. Every timeline of it."
+        confirmLabel="Yes, load it"
+        cancelLabel="Keep playing"
+        onConfirm={() => {
+          const code = linkCode;
+          setLinkCode(null);
+          if (code) acceptCodeRef.current(code);
+        }}
+        onCancel={() => {
+          setLinkCode(null);
+          clearCodeFromUrl();
+        }}
+      />
       <GameOverModal
         state={state}
         visible={!puzzle && state.status !== 'playing' && !gameOverDismissed}
@@ -500,6 +565,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         onDismiss={() => setGameOverDismissed(true)}
         onReplay={() => {
           setGameOverDismissed(true);
+          game.cancel();
           setReplayIndex(0);
         }}
       />

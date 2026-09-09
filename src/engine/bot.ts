@@ -101,6 +101,11 @@ export function chooseAction(state: GameState, level: BotLevel, rng: Rng = Math.
   // Under the strict-present rule, bots play what they must and leave the rest for later.
   if (canEndTurn(state) && mandatoryTimelines(state).length === 0) return { type: 'endTurn' };
   let actions = enumerateActions(state, level);
+  // A board can be blocked solid and still have a time travel available. The
+  // trapped-loss rule counts travels (see hasAnyAction), so such a position is
+  // not a loss and someone has to play it: the lower levels fall back to the
+  // full action list rather than having nothing to return.
+  if (actions.length === 0) actions = enumerateActions(state, 3);
   if (actions.length === 0) return null;
   if (actions.length > MAX_CANDIDATES) {
     const plain = actions.filter((a) => a.type !== 'travel');

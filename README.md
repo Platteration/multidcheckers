@@ -121,12 +121,14 @@ src/engine/types.ts        players, board references, turn parity
 src/engine/board.ts        one checkers board: moves, jump chains, kings
 src/engine/multiverse.ts   timelines, pending boards, time travel, rules, win/draw
 src/engine/bot.ts          the three-level computer opponent
-src/engine/__tests__/      unit tests for the rules, bots, puzzles, and game codes
+src/engine/__tests__/      unit tests for the rules, bots, puzzles, game codes,
+                           the autosave and links
 src/puzzles/index.ts       the puzzle set (each verified by a test)
 src/app/settings.tsx       persisted settings (theme, skin, sound, variants)
 src/app/theme.tsx          resolves settings into the palette screens draw with
 src/app/persist.ts         AsyncStorage helpers; app/progress.tsx for puzzle progress
 src/app/share.ts           game codes for play by message (app/base64.ts)
+src/app/setup.ts           how a game is set up, and the autosave format
 src/app/purchases.ts       the store seam; app/entitlements.tsx gates premium looks
 src/app/feedback.ts        haptics and sounds (app/sound.ts)
 src/ui/useGame.ts          game controller hook: history/undo, selection, bot turns

@@ -12,6 +12,7 @@ import {
   optionalTimelines,
   presentTurn,
   hasAnyAction,
+  latestRefIn,
   latestTurn,
   newGame,
   pendingTimelines,
@@ -315,5 +316,26 @@ describe('strict present rule', () => {
         if (g.status === 'playing' && !canEndTurn(g)) expect(presentTurn(g) % 2).toBe(g.toMove);
       }
     }
+  });
+});
+
+describe('looking at an earlier state', () => {
+  // The replay view shows a state from before a timeline existed. Anything the
+  // screen carries over from the live game - a picked-up piece, say - names a
+  // timeline that state may not have, and getTimeline throws out of the render.
+  const before = play(
+    newGame(),
+    step(0, index(2, 1), index(3, 0)),
+    step(0, index(5, 6), index(4, 7)),
+    step(0, index(2, 3), index(3, 2)),
+    step(0, index(5, 4), index(4, 5)),
+  );
+  const after = play(before, { type: 'travel', from: { timeline: 0, square: index(3, 2) }, to: { timeline: 0, turn: 2 } });
+
+  it('has no newest board for a timeline that does not exist yet', () => {
+    expect(after.timelines).toHaveLength(2);
+    expect(latestRefIn(after, 1)).toEqual({ timeline: 1, turn: 3 });
+    expect(latestRefIn(before, 1)).toBeNull();
+    expect(latestRefIn(before, 0)).toEqual({ timeline: 0, turn: 4 });
   });
 });

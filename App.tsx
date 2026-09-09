@@ -20,7 +20,7 @@ function Root() {
   const [saved, setSaved] = useState<Saved | null | undefined>(undefined);
 
   useEffect(() => {
-    loadJson<unknown>(keys.game).then((v) => setSaved(looksLikeSavedGame(v) ? normaliseSaved(v) : null));
+    loadJson<unknown>(keys.game).then((v) => setSaved((looksLikeSavedGame(v) ? normaliseSaved(v) : null) ?? null));
   }, []);
 
   if (!ready || saved === undefined) {

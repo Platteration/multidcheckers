@@ -127,6 +127,16 @@ export function latestRef(tl: Timeline): BoardRef {
   return { timeline: tl.id, turn: latestTurn(tl) };
 }
 
+/**
+ * The newest board of a timeline, or null when that timeline does not exist in
+ * this state. Use this instead of `latestRef(getTimeline(...))` anywhere the id
+ * may come from a different state, such as an earlier one being replayed.
+ */
+export function latestRefIn(state: GameState, timeline: number): BoardRef | null {
+  const tl = state.timelines[timeline];
+  return tl ? latestRef(tl) : null;
+}
+
 export function getBoard(state: GameState, ref: BoardRef): Board | undefined {
   const tl = state.timelines[ref.timeline];
   if (!tl) return undefined;

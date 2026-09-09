@@ -5,7 +5,9 @@
  */
 import { Action, GameState, Rules, applyAction, newGame } from '../engine';
 import { decode, encode } from './base64';
-import { DEFAULT_SETUP, GameSetup } from './setup';
+import { DEFAULT_SETUP, GameSetup, actionsOf } from './setup';
+
+export { actionsOf };
 
 const PREFIX = '5DCK.';
 
@@ -14,10 +16,6 @@ interface Payload {
   r: Rules;
   m: GameSetup['mode'];
   a: Action[];
-}
-
-export function actionsOf(history: GameState[]): Action[] {
-  return history.slice(1).map((s) => s.lastAction).filter((a): a is Action => !!a);
 }
 
 export function encodeGame(history: GameState[], setup: GameSetup): string {

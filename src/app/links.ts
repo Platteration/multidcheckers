@@ -21,3 +21,31 @@ export function webLinkFor(code: string): string | null {
   if (typeof window === 'undefined' || !window.location?.origin || window.location.origin.startsWith('null')) return null;
   return `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(code)}`;
 }
+
+/**
+ * The same URL with any game code removed, or null when there was none. A code
+ * left in the address bar is re-imported on every reload, replacing whatever has
+ * been played since.
+ */
+export function urlWithoutCode(href: string): string | null {
+  try {
+    const url = new URL(href);
+    const before = url.pathname + url.search + url.hash;
+    url.searchParams.delete('code');
+    if (/[?&#]code=/.test(url.hash)) url.hash = '';
+    url.pathname = url.pathname.replace(/\/load\/[^/?#]+\/?$/, '/');
+    const after = url.pathname + url.search + url.hash;
+    return after === before ? null : after;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the game code from the web address bar, so a reload does not re-import it. */
+export function clearCodeFromUrl(): void {
+  if (typeof window === 'undefined') return;
+  const href = window.location?.href;
+  if (!href || typeof window.history?.replaceState !== 'function') return;
+  const next = urlWithoutCode(href);
+  if (next) window.history.replaceState(null, '', next);
+}

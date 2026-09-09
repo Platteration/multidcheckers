@@ -16,11 +16,13 @@ export async function loadJson<T>(key: string): Promise<T | null> {
   }
 }
 
-export async function saveJson(key: string, value: unknown): Promise<void> {
+/** True when the value was written. Storage can be full, missing, or too small. */
+export async function saveJson(key: string, value: unknown): Promise<boolean> {
   try {
     await AsyncStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    // Ignore: persistence is a convenience, never a requirement.
+    return false;
   }
 }
 
