@@ -2,6 +2,21 @@
 
 Two independent reviewers read every first-party file in this repository; a third then re-read each security or bug claim against the code and tried to refute it. Only claims that survived that check are listed as findings; the ones that did not are recorded at the end so they are not re-raised.
 
+## Status — what has been fixed
+
+These findings are now fixed on `claude/repo-review-security-baiyud`, each with a regression test:
+
+- **BUG-1**
+- **REL-1**
+- **BUG-2**
+- **BUG-3**
+- **SEC-1**
+- **VER-1**
+
+The rest of this document is the review as written, and the fixed items are left in place so the reasoning behind each change stays with it.
+
+Repository hardening applied here as well: every GitHub Action is pinned to a commit rather than a floating tag, each workflow declares a least-privilege `permissions` block, and a Dependabot config, a licence and a security policy are in place.
+
 ## Summary
 
 5D Checkers is a polished, feature-complete Expo SDK 57 / RN 0.86 / React 19 pass-and-play game: a pure-TypeScript multiverse engine (board, timelines, time travel, three bot levels), six verified puzzles, replay, share-by-code, themes/skins, stats, a store seam, and 5 jest-expo engine test files. It is well past prototype and is genuinely close to shippable, but it is also a near-identical twin of the sibling repo multidconnect4: 23 first-party source files (~1,150 LOC) plus tsconfig/eas.json/ci.yml/.gitignore are byte-for-byte identical, and another 8 differ only in a product string. De-duplicating those into one shared package is the single highest-leverage change here, because every fix below currently has to be made twice. The other headline items are correctness (the bot plays a move computed from a replayed position; concurrent commits can build a history that no longer replays, which silently breaks share codes and autosave), scale (the whole game history is JSON-stringified into AsyncStorage on every move, growing quadratically, and the multiverse map re-renders every board because React.memo is defeated by an inline onPress), accessibility (light-theme primary buttons are 2.8:1, six unlabelled Switches, no reduce-motion, badges that are invisible), and app-store readiness (no LICENSE, no iOS privacy manifest, no splash config, generated placeholder icons, no OTA channel). Tooling is thin: no linter or formatter at all, no UI or app-layer tests, no Dependabot, unpinned actions, no permissions block.
