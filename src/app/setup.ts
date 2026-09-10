@@ -27,6 +27,17 @@ export function botShouldAct(setup: GameSetup, state: GameState, replaying: bool
   return state.status === 'playing' && state.toMove === setup.bot.player;
 }
 
+/**
+ * Whether the game-over sheet should be showing. Like the bot, it reads the
+ * LIVE game: the replay of a finished game walks back through states whose
+ * status is 'playing', so reading the replayed state would clear the dismissal
+ * on the way back and pop the sheet again over the replay bar at the end.
+ */
+export function gameOverVisible(live: GameState, puzzle: boolean, replaying: boolean, dismissed: boolean): boolean {
+  if (puzzle || replaying || dismissed) return false;
+  return live.status !== 'playing';
+}
+
 /** Just the actions of a game, oldest first: enough to replay it from its start. */
 export function actionsOf(history: GameState[]): Action[] {
   return history.slice(1).map((s) => s.lastAction).filter((a): a is Action => !!a);
@@ -72,7 +83,12 @@ export function looksLikeSavedGame(v: unknown): v is AnySaved {
   return (s.version === 1 || s.version === 2) && Array.isArray(s.history) && s.history.length > 0;
 }
 
-function cleanRules(v: unknown): Partial<Rules> {
+/**
+ * The rule variants as booleans of our own making. Saved games and shared codes
+ * both carry them, and both come from outside, so nothing else reaches newGame:
+ * `{"flyingKings": 1}` would otherwise turn the variant on.
+ */
+export function cleanRules(v: unknown): Partial<Rules> {
   const r = (v ?? {}) as Partial<Rules>;
   return { flyingKings: !!r.flyingKings, backCapture: !!r.backCapture, strictPresent: !!r.strictPresent };
 }

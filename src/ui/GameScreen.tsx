@@ -29,11 +29,11 @@ import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
 import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
-import { narrate } from '../app/narrate';
+import { narrate, variantsLabel } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
 import { decodeGame, encodeGame } from '../app/share';
-import { GameSetup, botShouldAct, savePayload } from '../app/setup';
+import { GameSetup, botShouldAct, gameOverVisible, savePayload } from '../app/setup';
 import { PUZZLES, puzzleById } from '../puzzles';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
@@ -252,9 +252,11 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.state, game.setup, bot, replaying]);
 
+  // The live game, not the replayed one: seeking back through a finished game
+  // passes states that are still 'playing' and would clear the dismissal.
   useEffect(() => {
-    if (state.status === 'playing') setGameOverDismissed(false);
-  }, [state.status]);
+    if (game.state.status === 'playing') setGameOverDismissed(false);
+  }, [game.state.status]);
 
   // A rejected link is worth one message, not a permanent one.
   useEffect(() => setLinkProblem(null), [game.history]);
@@ -312,6 +314,9 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     : bot
       ? `you vs ${BOT_NAMES[bot.level]} · you are ${colors.playerNames[bot.player === 0 ? 1 : 0]}`
       : 'with multiverse time travel';
+  // A loaded game carries the sender's rule variants, and the Settings switches
+  // only show what the NEXT new game will use, so name them where they apply.
+  const variants = variantsLabel(game.state.rules);
   let boardTitle = `${timelineLabel(focus.timeline)} · turn ${focus.turn}`;
   if (focusIsPending) boardTitle += ' · now';
   else if (focus.turn === latestRef(timeline).turn) boardTitle += state.status === 'playing' ? ' · waiting on the other side' : ' · final';
@@ -354,6 +359,11 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
           <Text style={styles.subtitle} numberOfLines={1}>
             {subtitle}
           </Text>
+          {variants ? (
+            <Text style={styles.variants} numberOfLines={1}>
+              {variants}
+            </Text>
+          ) : null}
         </View>
         <Button label="Undo" small onPress={game.undo} disabled={!game.canUndo} />
         <View style={{ width: spacing.xs }} />
@@ -556,8 +566,8 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         }}
       />
       <GameOverModal
-        state={state}
-        visible={!puzzle && state.status !== 'playing' && !gameOverDismissed}
+        state={game.state}
+        visible={gameOverVisible(game.state, !!puzzle, replaying, gameOverDismissed)}
         onRestart={() => {
           setGameOverDismissed(true);
           setNewGameOpen(true);
@@ -589,6 +599,7 @@ const makeStyles = (colors: Theme) =>
   },
   title: { color: colors.text, fontSize: 18, fontWeight: '900', letterSpacing: 0.3 },
   subtitle: { color: colors.textMuted, fontSize: 11 },
+  variants: { color: colors.travel, fontSize: 11, fontWeight: '700' },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -53,8 +53,9 @@ opponent must defend, or pull a doomed piece out of the present.
 - **Rule variants.** Flying kings, backward captures for men, and strict
   present, the real 5D Chess rule: only boards at the present must be played,
   boards ahead of it are optional, and you end your turn yourself. All off by
-  default. Forty quiet moves each with no capture, crowning or travel is a
-  draw.
+  default, and whichever are on are named under the title: a game that arrives
+  as a code brings its own rules, so it cannot change them on you quietly.
+  Forty quiet moves each with no capture, crowning or travel is a draw.
 - **Themes and looks.** System, dark or light theme; five board skins; four
   piece sets that also rename the sides; colour-blind markings on pieces.
 - **Feel.** Haptics and short synthesized sounds, both switchable. Pieces
@@ -122,7 +123,7 @@ src/engine/board.ts        one checkers board: moves, jump chains, kings
 src/engine/multiverse.ts   timelines, pending boards, time travel, rules, win/draw
 src/engine/bot.ts          the three-level computer opponent
 src/engine/__tests__/      unit tests for the rules, bots, puzzles, game codes,
-                           the autosave and links
+                           the autosave, links and the app config
 src/puzzles/index.ts       the puzzle set (each verified by a test)
 src/app/settings.tsx       persisted settings (theme, skin, sound, variants)
 src/app/theme.tsx          resolves settings into the palette screens draw with

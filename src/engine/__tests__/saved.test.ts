@@ -8,7 +8,15 @@ import { boardFromRows, index } from '../board';
 import { chooseAction, enumerateActions } from '../bot';
 import { GameState, applyAction, newGame } from '../multiverse';
 import { PUZZLES, puzzleById } from '../../puzzles';
-import { DEFAULT_SETUP, GameSetup, botShouldAct, looksLikeSavedGame, normaliseSaved, savePayload } from '../../app/setup';
+import {
+  DEFAULT_SETUP,
+  GameSetup,
+  botShouldAct,
+  gameOverVisible,
+  looksLikeSavedGame,
+  normaliseSaved,
+  savePayload,
+} from '../../app/setup';
 
 const seeded = (seed = 1) => () => {
   seed = (seed * 16807) % 2147483647;
@@ -156,5 +164,30 @@ describe('who acts on a state', () => {
 
   it('never acts once the game is over', () => {
     expect(botShouldAct(bot, { ...afterRed, status: 'won' }, false)).toBe(false);
+  });
+});
+
+describe('the game-over sheet', () => {
+  const playing = newGame();
+  const finished: GameState = { ...playing, status: 'won' };
+
+  it('shows once the live game is over', () => {
+    expect(gameOverVisible(finished, false, false, false)).toBe(true);
+    expect(gameOverVisible(playing, false, false, false)).toBe(false);
+  });
+
+  it('stays away for the whole of a replay', () => {
+    // 'Watch the replay' dismisses the sheet and seeks to the start, and every
+    // state before the last one is still 'playing', which clears the dismissal
+    // again. The sheet used to pop back over the replay bar at the end because
+    // of it, so replaying is enough on its own to keep it away.
+    expect(gameOverVisible(finished, false, true, true)).toBe(false);
+    expect(gameOverVisible(finished, false, true, false)).toBe(false);
+  });
+
+  it('does not come back once dismissed, and never shows for a puzzle', () => {
+    // A puzzle has its own result sheet.
+    expect(gameOverVisible(finished, false, false, true)).toBe(false);
+    expect(gameOverVisible(finished, true, false, false)).toBe(false);
   });
 });

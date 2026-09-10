@@ -2,6 +2,9 @@ import { decode, encode } from '../../app/base64';
 import { decodeGame, encodeGame } from '../../app/share';
 import { Action, applyAction, index, newGame } from '../index';
 
+/** A code built by hand, so a payload the app would never write can be tested. */
+const codeFor = (payload: unknown): string => '5DCK.' + encode(JSON.stringify(payload));
+
 const step = (from: number, to: number): Action => ({ type: 'move', timeline: 0, move: { from, path: [to], captures: [] } });
 
 describe('game codes', () => {
@@ -29,5 +32,43 @@ describe('game codes', () => {
   it('rejects junk codes', () => {
     expect(() => decodeGame('hello')).toThrow(/not a 5D/);
     expect(() => decodeGame('5DCK.!!!')).toThrow(/damaged/);
+  });
+
+  it('reads a code that a message wrapped', () => {
+    // Codes are long and chat clients, email and terminals all break long
+    // tokens. None of the whitespace belongs to the alphabet, so a wrapped
+    // code used to fail as 'damaged' when it had survived the trip intact.
+    const actions: Action[] = [step(index(2, 1), index(3, 0)), step(index(5, 6), index(4, 7))];
+    const history = actions.reduce((h, a) => [...h, applyAction(h[h.length - 1], a)], [newGame()]);
+    const code = encodeGame(history, { mode: 'local' });
+    const wrapped = (code.match(/.{1,40}/g) ?? []).join('\n');
+    expect(wrapped).not.toBe(code);
+    expect(decodeGame(wrapped).history).toHaveLength(history.length);
+    expect(decodeGame(`  \n${code}\r\n `).history).toHaveLength(history.length);
+    expect(decodeGame(code.split('').join(' ')).history).toHaveLength(history.length);
+  });
+
+  it('takes the rule variants as booleans of its own making', () => {
+    // The sender chooses the rules for the game you load, so nothing but the
+    // three known keys reaches the engine, and each one as a real boolean.
+    const loaded = decodeGame(
+      codeFor({ v: 1, r: { flyingKings: 1, backCapture: 0, strictPresent: null, sneaky: true }, m: 'local', a: [] }),
+    );
+    expect(loaded.history[0].rules).toEqual({ flyingKings: true, backCapture: false, strictPresent: false });
+    expect(decodeGame(codeFor({ v: 1, r: null, m: 'local', a: [] })).history[0].rules).toEqual({
+      flyingKings: false,
+      backCapture: false,
+      strictPresent: false,
+    });
+  });
+
+  it('refuses a code too large to be worth replaying', () => {
+    // Every replayed state copies every timeline, and the result is saved and
+    // drawn, so an entirely legal code can still be far too big to accept.
+    expect(() => decodeGame('5DCK.' + 'A'.repeat(64 * 1024))).toThrow(/too large/);
+    const many = { v: 1, r: {}, m: 'local', a: new Array(2001).fill(step(index(2, 1), index(3, 0))) };
+    expect(() => decodeGame(codeFor(many))).toThrow(/too large/);
+    // The cap is well clear of any real game: this one still loads.
+    expect(() => decodeGame(codeFor({ ...many, a: [] }))).not.toThrow();
   });
 });
