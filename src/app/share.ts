@@ -13,7 +13,11 @@ const PREFIX = '5DCK.';
 
 /** A code for a real game is a few kB. Anything larger is not worth decoding. */
 const MAX_CODE_LENGTH = 64 * 1024;
-/** A long game is a few hundred actions; this is well past any of them. */
+/**
+ * A long game is a few hundred actions; this is well past any of them. This is
+ * not the byte cap in disguise: an action can be as little as 25 bytes of code,
+ * so thousands of them fit inside 64 kB and only a count stops them.
+ */
 const MAX_ACTIONS = 2000;
 
 interface Payload {
@@ -45,7 +49,9 @@ export function decodeGame(code: string): { history: GameState[]; setup: GameSet
     throw new Error('That code is damaged and cannot be read.');
   }
   if (payload.v !== 1 || !Array.isArray(payload.a)) throw new Error('That code is from a version this app cannot read.');
-  if (payload.a.length > MAX_ACTIONS) throw new Error('That game is too large to load.');
+  // Its own message, not the byte cap's: only one of the two guards can have
+  // fired, and both the reader and the tests should be able to tell which.
+  if (payload.a.length > MAX_ACTIONS) throw new Error('That game has too many moves to load.');
   // The sender picks the rule variants, so they are read as booleans of our own
   // making: nothing else from the payload reaches the engine's rules.
   const history: GameState[] = [newGame(cleanRules(payload.r))];

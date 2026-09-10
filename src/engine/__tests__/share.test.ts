@@ -66,9 +66,22 @@ describe('game codes', () => {
     // Every replayed state copies every timeline, and the result is saved and
     // drawn, so an entirely legal code can still be far too big to accept.
     expect(() => decodeGame('5DCK.' + 'A'.repeat(64 * 1024))).toThrow(/too large/);
-    const many = { v: 1, r: {}, m: 'local', a: new Array(2001).fill(step(index(2, 1), index(3, 0))) };
-    expect(() => decodeGame(codeFor(many))).toThrow(/too large/);
-    // The cap is well clear of any real game: this one still loads.
-    expect(() => decodeGame(codeFor({ ...many, a: [] }))).not.toThrow();
+    // A real game is nowhere near either cap: this one still loads.
+    expect(() => decodeGame(codeFor({ v: 1, r: {}, m: 'local', a: [] }))).not.toThrow();
+  });
+
+  it('refuses a code with more actions than it will replay', () => {
+    // The action cap has to be tested with a code the byte cap lets through,
+    // or it is the byte cap being tested twice: 2001 moves are ~197 kB of
+    // code and never reach this check, while 2001 of the cheapest action are
+    // ~50 kB and only a count of them stops the replay.
+    const endTurns = (n: number) => codeFor({ v: 1, r: {}, m: 'local', a: new Array(n).fill({ type: 'endTurn' }) });
+    const over = endTurns(2001);
+    expect(over.length).toBeLessThan(64 * 1024);
+    expect(() => decodeGame(over)).toThrow(/too many moves/);
+    // One action fewer is under the cap, so it is replayed and stopped by the
+    // rules instead — which is what makes the throw above the count check and
+    // nothing else.
+    expect(() => decodeGame(endTurns(2000))).toThrow(/not legal/);
   });
 });

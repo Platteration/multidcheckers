@@ -106,7 +106,7 @@ npm run web        # in a browser
 Quality checks:
 
 ```sh
-npm test           # engine unit tests (jest-expo)
+npm test           # unit tests (jest-expo)
 npm run typecheck  # tsc --noEmit
 ```
 
@@ -138,6 +138,8 @@ src/ui/CheckerBoard.tsx    the big tappable board with the landing animation
 src/ui/MiniBoard.tsx       board thumbnails for the map
 src/ui/MultiverseMap.tsx   the timeline map (rows = timelines, columns = turns)
 src/ui/*Modal.tsx          menu, rules, settings, new game, puzzles, share, extras
+src/ui/__tests__/          contrast checks on the header text, which is drawn
+                           straight on the background
 ```
 
 The engine is pure TypeScript with no React dependency, so the rules can be

@@ -49,7 +49,7 @@ import { ShareModal } from './ShareModal';
 import { Button, ConfirmModal, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
 import { Row, Section, SettingsModal } from './SettingsModal';
-import { Theme, radius, spacing } from './theme';
+import { Theme, headerTextStyles, radius, spacing } from './theme';
 import { useTheme } from '../app/theme';
 import { useGame } from './useGame';
 
@@ -597,9 +597,9 @@ const makeStyles = (colors: Theme) =>
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  title: { color: colors.text, fontSize: 18, fontWeight: '900', letterSpacing: 0.3 },
-  subtitle: { color: colors.textMuted, fontSize: 11 },
-  variants: { color: colors.travel, fontSize: 11, fontWeight: '700' },
+  // title, subtitle and variants: see headerTextStyles in theme.ts, which is
+  // where a test can check they are readable on the background they sit on.
+  ...headerTextStyles(colors),
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
