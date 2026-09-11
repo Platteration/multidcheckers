@@ -5,7 +5,7 @@
  */
 import { Action, GameState, Rules, applyAction, newGame } from '../engine';
 import { decode, encode } from './base64';
-import { DEFAULT_SETUP, GameSetup, actionsOf, cleanRules } from './setup';
+import { DEFAULT_SETUP, GameSetup, MAX_ACTIONS, actionsOf, cleanRules } from './setup';
 
 export { actionsOf };
 
@@ -13,12 +13,28 @@ const PREFIX = '5DCK.';
 
 /** A code for a real game is a few kB. Anything larger is not worth decoding. */
 const MAX_CODE_LENGTH = 64 * 1024;
+
 /**
- * A long game is a few hundred actions; this is well past any of them. This is
- * not the byte cap in disguise: an action can be as little as 25 bytes of code,
- * so thousands of them fit inside 64 kB and only a count stops them.
+ * How large a multiverse an imported code may build. The two caps above are
+ * counted on the code and neither bounds the result: a time travel adds a board
+ * to the timeline it leaves AND forks a new one, so ~78 bytes of code buys two
+ * boards and a whole timeline, and a code inside both caps still replays into
+ * 502 timelines and 1107 boards. Sized from real play: 120 actions against the
+ * strongest bot make 36 timelines and 156 boards, and 400 of them - far longer
+ * than any game played by hand - make 78 and 478, so nothing a friend actually
+ * played and sent is refused. The saved game deliberately has no such ceiling;
+ * normaliseSaved says why.
  */
-const MAX_ACTIONS = 2000;
+const MAX_TIMELINES = 96;
+const MAX_BOARDS = 600;
+
+/** Whether a replayed game has grown past what an import may hand this app. */
+function tooLargeToDraw(state: GameState): boolean {
+  if (state.timelines.length > MAX_TIMELINES) return true;
+  let boards = 0;
+  for (const tl of state.timelines) boards += tl.boards.length;
+  return boards > MAX_BOARDS;
+}
 
 interface Payload {
   v: 1;
@@ -61,6 +77,9 @@ export function decodeGame(code: string): { history: GameState[]; setup: GameSet
     } catch {
       throw new Error('That code contains a move that is not legal.');
     }
+    // Check the size that actually costs, and check it as the replay grows
+    // rather than once it has finished growing.
+    if (tooLargeToDraw(history[history.length - 1])) throw new Error('That game has grown too large for this app to draw.');
   }
   return { history, setup: payload.m === 'bot' ? { mode: 'local' } : DEFAULT_SETUP };
 }

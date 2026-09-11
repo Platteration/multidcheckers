@@ -6,12 +6,15 @@
  */
 import { boardFromRows, index } from '../board';
 import { chooseAction, enumerateActions } from '../bot';
-import { GameState, applyAction, newGame } from '../multiverse';
+import { GameState, applyAction, newGame, pendingTimelines } from '../multiverse';
 import { PUZZLES, puzzleById } from '../../puzzles';
+import { decodeGame, encodeGame } from '../../app/share';
 import {
   DEFAULT_SETUP,
   GameSetup,
+  MAX_ACTIONS,
   botShouldAct,
+  cleanSetup,
   gameOverVisible,
   looksLikeSavedGame,
   normaliseSaved,
@@ -33,6 +36,28 @@ function playOut(n: number, from: GameState = newGame()): GameState[] {
     const state = history[history.length - 1];
     if (state.status !== 'playing') break;
     const action = chooseAction(state, 3, rng);
+    if (!action) break;
+    history.push(applyAction(state, action));
+  }
+  return history;
+}
+
+/**
+ * A game played by someone who takes a time travel whenever one is on offer -
+ * every action legal and chosen one at a time, exactly as tapping through the
+ * app produces them. It is how a real game grows its multiverse fastest; the
+ * strongest bot gets to the same place, just far too slowly to do in a test
+ * (400 bot actions reach 78 timelines, 1,100 reach 142).
+ */
+function travelHeavy(timelines: number): GameState[] {
+  const history: GameState[] = [newGame()];
+  let nth = 0;
+  while (history[history.length - 1].timelines.length < timelines) {
+    const state = history[history.length - 1];
+    if (state.status !== 'playing') break;
+    const options = enumerateActions(state, 3);
+    const travels = options.filter((a) => a.type === 'travel');
+    const action = travels.length ? travels[nth++ % travels.length] : options[0];
     if (!action) break;
     history.push(applyAction(state, action));
   }
@@ -131,6 +156,64 @@ describe('what the autosave reads back', () => {
       expect(looksLikeSavedGame(junk)).toBe(false);
     }
     expect(looksLikeSavedGame({ version: 3, actions: [] })).toBe(true);
+  });
+
+  it('replays an older save rather than trusting the states in it', () => {
+    // A v1/v2 record holds whole states, and storage is as much outside input
+    // as a share code is. Only the actions are read out of them; the states are
+    // rebuilt by the engine, so a record full of nonsense is a game that cannot
+    // be replayed rather than a value the first render chokes on.
+    const junk = { version: 2 as const, history: [{ timelines: 'nope', rules: 'not-rules' }] as never, setup: LOCAL };
+    expect(looksLikeSavedGame(junk)).toBe(true);
+    const restored = normaliseSaved(junk)!;
+    expect(restored).not.toBeNull();
+    expect(pendingTimelines(restored.history[0])).toHaveLength(1);
+    expect(restored.history[0]).toEqual(newGame());
+  });
+
+  it('rebuilds the setup from values of its own, on either shape of save', () => {
+    // setup.bot.level picks the bot's search and indexes BOT_NAMES, and mode
+    // decides whether the bot plays at all, so a stored setup does not get to
+    // name either: '__proto__' as a level finds Object.prototype on the table.
+    const hostile = { mode: 'bot', bot: { level: '__proto__', player: 7 } } as never;
+    expect(cleanSetup(hostile)).toEqual({ mode: 'bot' });
+    expect(cleanSetup({ mode: 'nonsense' } as never)).toEqual({ mode: 'local' });
+    expect(cleanSetup(null)).toEqual(DEFAULT_SETUP);
+    expect(cleanSetup({ mode: 'bot', bot: { level: 2, player: 1 } })).toEqual({ mode: 'bot', bot: { level: 2, player: 1 } });
+    // An unknown puzzle is dropped, and a save that names one cannot be replayed
+    // as an ordinary game instead.
+    expect(cleanSetup({ mode: 'puzzle', puzzleId: 'no-such-puzzle' })).toEqual({ mode: 'puzzle' });
+    expect(normaliseSaved({ version: 2 as const, history: GAME.slice(0, 5), setup: hostile })!.setup).toEqual({ mode: 'bot' });
+  });
+
+  it('restores a game the player played, however large its multiverse grew', () => {
+    // A shared code is refused once its multiverse outgrows what an import may
+    // carry; the autosave is not, and that difference is on purpose. This game
+    // was played one action at a time, every state of it drawn on the way, so
+    // refusing it at launch would delete the player's own work - while refusing
+    // a pasted code costs them nothing they had. The bounds that are left here
+    // are the action cap below and the rules themselves.
+    const history = travelHeavy(160);
+    const last = history[history.length - 1];
+    // Larger than 1,100 actions of the strongest bot ever built (142 timelines).
+    expect(last.timelines.length).toBeGreaterThan(142);
+    const restored = normaliseSaved(savePayload(history, LOCAL)!)!;
+    expect(restored.history).toHaveLength(history.length);
+    expect(restored.history[restored.history.length - 1]).toEqual(last);
+    // The very same game, sent as a code, is refused: that is the asymmetry.
+    expect(() => decodeGame(encodeGame(history, LOCAL))).toThrow(/too large for this app to draw/);
+  });
+
+  it('refuses a stored action list longer than it will replay', () => {
+    // A pasted code has been capped at MAX_ACTIONS since the code caps went in;
+    // a stored list is replayed by the same engine and used to have no cap.
+    const many = { version: 3 as const, actions: new Array(MAX_ACTIONS + 1).fill({ type: 'endTurn' }), rules: newGame().rules, setup: LOCAL };
+    expect(looksLikeSavedGame(many)).toBe(false);
+    expect(normaliseSaved(many)).toBeNull();
+    // One fewer is accepted by the shape check and stopped by the rules instead.
+    const one = { ...many, actions: new Array(MAX_ACTIONS).fill({ type: 'endTurn' }) };
+    expect(looksLikeSavedGame(one)).toBe(true);
+    expect(normaliseSaved(one)).toBeNull();
   });
 
   it('gives up on a game whose actions do not replay', () => {

@@ -1,11 +1,32 @@
 import { decode, encode } from '../../app/base64';
 import { decodeGame, encodeGame } from '../../app/share';
-import { Action, applyAction, index, newGame } from '../index';
+import { Action, applyAction, enumerateActions, index, newGame } from '../index';
 
 /** A code built by hand, so a payload the app would never write can be tested. */
 const codeFor = (payload: unknown): string => '5DCK.' + encode(JSON.stringify(payload));
 
 const step = (from: number, to: number): Action => ({ type: 'move', timeline: 0, move: { from, path: [to], captures: [] } });
+
+/**
+ * A legal game that takes a time travel whenever one is on offer, played until
+ * it has that many timelines. This is the shape a code grows the multiverse
+ * with: every travel adds a board to the timeline it leaves and forks another,
+ * so it buys more boards per byte of code than anything else can.
+ */
+function travelHeavy(timelines: number): { code: string; actions: Action[] } {
+  const actions: Action[] = [];
+  let state = newGame();
+  let nth = 0;
+  while (state.timelines.length < timelines && state.status === 'playing') {
+    const options = enumerateActions(state, 3);
+    const travels = options.filter((a) => a.type === 'travel');
+    const action = travels.length ? travels[nth++ % travels.length] : options[0];
+    if (!action) break;
+    actions.push(action);
+    state = applyAction(state, action);
+  }
+  return { code: codeFor({ v: 1, r: {}, m: 'local', a: actions }), actions };
+}
 
 describe('game codes', () => {
   it('round-trips text through base64', () => {
@@ -83,5 +104,25 @@ describe('game codes', () => {
     // rules instead — which is what makes the throw above the count check and
     // nothing else.
     expect(() => decodeGame(endTurns(2000))).toThrow(/not legal/);
+  });
+
+  it('refuses a code that replays into more multiverse than an import may', () => {
+    // Both caps above are counted on the code, and neither bounds what the code
+    // builds: a travel costs about 78 bytes and buys two boards and a whole
+    // timeline. So this one sits inside both of them with room to spare - which
+    // is what the two expectations below say - and still outgrows the import.
+    // The counts are from measured play, not from the constant under test: 400
+    // actions against the strongest bot, far longer than a game played by hand,
+    // reach 78 timelines, so a code of 88 has to load and one of 104 has to be
+    // refused for the ceiling to be anywhere sane between them.
+    const big = travelHeavy(104);
+    expect(big.code.length).toBeLessThan(64 * 1024);
+    expect(big.actions.length).toBeLessThan(2000);
+    expect(() => decodeGame(big.code)).toThrow(/too large for this app to draw/);
+
+    // The same game stopped short of the ceiling still loads, so it is the size
+    // of the multiverse being refused above and not the shape of the actions.
+    const small = travelHeavy(88);
+    expect(decodeGame(small.code).history).toHaveLength(small.actions.length + 1);
   });
 });

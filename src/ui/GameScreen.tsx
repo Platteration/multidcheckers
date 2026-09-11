@@ -112,7 +112,9 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   const acceptCode = (code: string) => {
     const problem = loadCode(code);
     setLinkProblem(problem);
-    if (!problem) clearCodeFromUrl();
+    // Whether it loaded or not: a code left in the address bar is read again on
+    // every reload, and one that was refused is refused again just as often.
+    clearCodeFromUrl();
   };
   const acceptCodeRef = useRef(acceptCode);
   acceptCodeRef.current = acceptCode;

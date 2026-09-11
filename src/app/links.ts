@@ -12,7 +12,12 @@ export function codeFromUrl(url: string | null | undefined): string | null {
       return match[1];
     }
   }
-  const path = /\/load\/([^/?#]+)/.exec(url);
+  // The last path segment only, and never what follows a `?` or a `#`: what
+  // this finds has to be exactly what urlWithoutCode can strip. A code it reads
+  // out of `/load/<code>/x` or out of the fragment is one the cleaner leaves
+  // where it is, and a code left in the address bar is imported again on every
+  // reload.
+  const path = /\/load\/([^/?#]+)\/?$/.exec(url.replace(/[?#][\s\S]*$/, ''));
   return path ? path[1] : null;
 }
 
@@ -25,7 +30,8 @@ export function webLinkFor(code: string): string | null {
 /**
  * The same URL with any game code removed, or null when there was none. A code
  * left in the address bar is re-imported on every reload, replacing whatever has
- * been played since.
+ * been played since, so this is the inverse of codeFromUrl: whatever that reads
+ * out of a link, this has to take back out of it.
  */
 export function urlWithoutCode(href: string): string | null {
   try {
@@ -33,7 +39,9 @@ export function urlWithoutCode(href: string): string | null {
     const before = url.pathname + url.search + url.hash;
     url.searchParams.delete('code');
     if (/[?&#]code=/.test(url.hash)) url.hash = '';
-    url.pathname = url.pathname.replace(/\/load\/[^/?#]+\/?$/, '/');
+    // Once per segment: stripping `/load/x/load/y` leaves `/load/x/`, which is
+    // itself a link the reader takes a code out of.
+    while (/\/load\/[^/?#]+\/?$/.test(url.pathname)) url.pathname = url.pathname.replace(/\/load\/[^/?#]+\/?$/, '/');
     const after = url.pathname + url.search + url.hash;
     return after === before ? null : after;
   } catch {
