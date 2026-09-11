@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Secrets: ignore every .env variant, but keep the documented template.
+.env*
+!.env.example
