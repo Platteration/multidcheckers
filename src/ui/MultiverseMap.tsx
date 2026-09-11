@@ -31,10 +31,14 @@ const OVERSCAN = 2;
  * imported one a denial of service however tightly the import itself is capped.
  * Both arguments are in the content's own pixels.
  */
-export function visibleBand(
-  scroll: { x: number; y: number },
-  viewport: { width: number; height: number },
-): { fromTurn: number; toTurn: number; fromTimeline: number; toTimeline: number } {
+export interface Band {
+  fromTurn: number;
+  toTurn: number;
+  fromTimeline: number;
+  toTimeline: number;
+}
+
+export function visibleBand(scroll: { x: number; y: number }, viewport: { width: number; height: number }): Band {
   // Nothing is measured until the first layout; a phone-sized guess draws the
   // map on that first frame rather than leaving it blank.
   const width = viewport.width || 360;
@@ -46,6 +50,34 @@ export function visibleBand(
     fromTimeline: Math.floor((scroll.y - HEADER) / ROW) - OVERSCAN,
     toTimeline: Math.ceil((scroll.y - HEADER + height) / ROW) + OVERSCAN,
   };
+}
+
+/**
+ * The band actually drawn. `visibleBand` believes the scroll position, and the
+ * scroll position is only ever moved by the platform's own scroll events: a map
+ * that has been scrolled deep and then shows a game with fewer timelines - a new
+ * game, an undo, a loaded code - is pointed at nothing until a scroll event
+ * arrives to clamp it, and before the first layout there has been no scroll
+ * event at all. Both leave the player a blank map that scrolling cannot fix, so
+ * when the scroll position is not believable the band is taken around the
+ * focused board instead, which is always inside the state.
+ */
+export function drawnBand(
+  scroll: { x: number; y: number },
+  viewport: { width: number; height: number },
+  content: { timelines: number; lastTurn: number },
+  focus: BoardRef,
+): Band {
+  const band = visibleBand(scroll, viewport);
+  const measured = viewport.width > 0 && viewport.height > 0;
+  const covers =
+    band.fromTimeline < content.timelines && band.toTimeline >= 0 && band.fromTurn <= content.lastTurn && band.toTurn >= 0;
+  if (measured && covers) return band;
+  const rows = band.toTimeline - band.fromTimeline;
+  const turns = band.toTurn - band.fromTurn;
+  const fromTimeline = focus.timeline - Math.floor(rows / 2);
+  const fromTurn = focus.turn - Math.floor(turns / 2);
+  return { fromTurn, toTurn: fromTurn + turns, fromTimeline, toTimeline: fromTimeline + rows };
 }
 
 interface Props {
@@ -82,7 +114,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
       if (Math.floor(s[axis] / (axis === 'x' ? SLOT : ROW)) === Math.floor(to / (axis === 'x' ? SLOT : ROW))) return s;
       return axis === 'x' ? { x: to, y: s.y } : { x: s.x, y: to };
     });
-  const band = visibleBand(scroll, viewport);
+  const band = drawnBand(scroll, viewport, { timelines: state.timelines.length, lastTurn }, focus);
   // The turn numbers along the top are windowed with everything else.
   const firstLabel = Math.max(0, band.fromTurn);
   const labelCount = Math.max(0, Math.min(lastTurn, band.toTurn) - firstLabel + 1);
@@ -110,13 +142,20 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
   const travellerColor = travel ? colors.players[playerToMoveAt(state.lastCreated[0].turn - 1)] : colors.travel;
 
   // Keep the focused board in view as the player jumps around the multiverse.
+  // Also whenever the game itself changes shape: a multiverse that lost
+  // timelines leaves the scroll position pointing past the end of it, and the
+  // scrollTo is what asks the platform for the scroll event that puts the band
+  // back where the content is. An unmeasured viewport uses the same guess the
+  // band does rather than skipping the scroll, which used to leave a restored
+  // game focused deep in the multiverse looking at an empty corner of it.
   useEffect(() => {
-    if (!viewport.width) return;
-    const x = (focus.turn + 1) * SLOT + SLOT / 2 - viewport.width / 2;
+    const width = viewport.width || 360;
+    const height = viewport.height || 240;
+    const x = (focus.turn + 1) * SLOT + SLOT / 2 - width / 2;
     horizontal.current?.scrollTo({ x: Math.max(0, x), animated: true });
-    const y = focus.timeline * ROW + ROW / 2 - viewport.height / 2;
+    const y = focus.timeline * ROW + ROW / 2 - height / 2;
     vertical.current?.scrollTo({ y: Math.max(0, y), animated: true });
-  }, [focus.timeline, focus.turn, viewport]);
+  }, [focus.timeline, focus.turn, viewport, state.timelines.length, lastTurn]);
 
   return (
     <ScrollView

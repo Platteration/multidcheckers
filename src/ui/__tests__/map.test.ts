@@ -13,7 +13,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { MINI_HEIGHT, MINI_WIDTH } from '../MiniBoard';
-import { HEADER, ROW, SLOT, visibleBand } from '../MultiverseMap';
+import { HEADER, ROW, SLOT, drawnBand, visibleBand } from '../MultiverseMap';
 
 /** A phone-sized map pane, and a few places the player might have scrolled it to. */
 const VIEWPORT = { width: 380, height: 260 };
@@ -57,5 +57,44 @@ describe('the part of the map that gets drawn', () => {
     expect(rows(deep)).toBe(rows(start));
     expect(turns(start)).toBeLessThan(VIEWPORT.width / SLOT + 8);
     expect(rows(start)).toBeLessThan(VIEWPORT.height / ROW + 8);
+  });
+});
+
+describe('the band when the scroll position cannot be believed', () => {
+  // `scroll` only ever moves when the platform reports a scroll, so it can be
+  // pointing at a part of the multiverse that no longer exists - a new game or
+  // an undo under a map scrolled far down - or at nothing at all, before the
+  // first layout. Both draw an empty map that scrolling does not fix.
+  const BIG = { timelines: 120, lastTurn: 40 };
+  const deep = { x: SLOT * 30, y: ROW * 100 };
+
+  it('keeps the viewport band while the viewport still covers the game', () => {
+    const focus = { timeline: 100, turn: 30 };
+    expect(drawnBand(deep, VIEWPORT, BIG, focus)).toEqual(visibleBand(deep, VIEWPORT));
+  });
+
+  it('falls back to the focused board when the game has shrunk under the scroll', () => {
+    const focus = { timeline: 0, turn: 0 };
+    const band = drawnBand(deep, VIEWPORT, { timelines: 1, lastTurn: 2 }, focus);
+    expect(band.fromTimeline).toBeLessThanOrEqual(0);
+    expect(band.toTimeline).toBeGreaterThanOrEqual(0);
+    expect(band.fromTurn).toBeLessThanOrEqual(0);
+    expect(band.toTurn).toBeGreaterThanOrEqual(0);
+    // Still a screenful, not the whole game: the fallback is a band, not a
+    // licence to draw everything.
+    expect(rows(band)).toBe(rows(visibleBand(deep, VIEWPORT)));
+    expect(turns(band)).toBe(turns(visibleBand(deep, VIEWPORT)));
+  });
+
+  it('covers the focused board while nothing has been measured', () => {
+    // A layout that reports no width used to keep the top-left corner and skip
+    // the scroll that would have moved it, so a restored game focused deep in
+    // the multiverse drew an empty region.
+    const focus = { timeline: 100, turn: 30 };
+    const band = drawnBand({ x: 0, y: 0 }, { width: 0, height: 0 }, BIG, focus);
+    expect(band.fromTimeline).toBeLessThanOrEqual(focus.timeline);
+    expect(band.toTimeline).toBeGreaterThanOrEqual(focus.timeline);
+    expect(band.fromTurn).toBeLessThanOrEqual(focus.turn);
+    expect(band.toTurn).toBeGreaterThanOrEqual(focus.turn);
   });
 });

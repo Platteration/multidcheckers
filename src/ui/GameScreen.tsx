@@ -32,8 +32,8 @@ import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
 import { narrate, variantsLabel } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
-import { decodeGame, encodeGame } from '../app/share';
-import { GameSetup, botShouldAct, gameOverVisible, savePayload } from '../app/setup';
+import { decodeGame, shareOffer } from '../app/share';
+import { GameSetup, botShouldAct, gameOverVisible, saveDecision } from '../app/setup';
 import { PUZZLES, puzzleById } from '../puzzles';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
@@ -57,9 +57,15 @@ interface Props {
   /** A saved game to resume, oldest state first. */
   initialHistory?: GameState[];
   initialSetup?: GameSetup;
+  /**
+   * There is a stored game that could not be replayed. It is still the only
+   * copy of whatever the player last played, so the fresh game started over it
+   * must not remove it; only a game they actually play may overwrite it.
+   */
+  keepStoredGame?: boolean;
 }
 
-export function GameScreen({ initialHistory, initialSetup }: Props) {
+export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, setVariant, update: updateSettings } = useSettings();
@@ -183,10 +189,10 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     ],
     [welcomeDemo, colors],
   );
-  const shareCode = useMemo(
-    () => (game.history.length > 1 && game.setup.mode !== 'puzzle' ? encodeGame(game.history, game.setup) : null),
-    [game.history, game.setup],
-  );
+  // The code to send, or why this game cannot be sent: every cap the loading
+  // end applies is applied here too, so the app never hands out a code that
+  // nobody - including the sender, on another device - could ever load.
+  const share = useMemo(() => shareOffer(game.history, game.setup), [game.history, game.setup]);
   const { width, height } = useWindowDimensions();
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -204,13 +210,26 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   // Save the game whenever it changes, a moment after the last change. Only the
   // actions are written: the states share their boards in memory but JSON does
   // not, so writing the history costs megabytes by the hundredth move.
-  const [saveFailed, setSaveFailed] = useState(false);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+  // A record this launch could not read is not ours to remove: it is the
+  // player's last game, and a fresh game started over it would otherwise erase
+  // it before they had a chance to see it was there. Playing a move replaces
+  // it, which is the player's own doing.
+  const keepStoredRef = useRef(!!keepStoredGame);
   useEffect(() => {
-    const payload = savePayload(game.history, game.setup);
+    const decision = saveDecision(game.history, game.setup, !keepStoredRef.current);
     const timer = setTimeout(() => {
-      if (payload) void saveJson(keys.game, payload).then((ok) => setSaveFailed(!ok));
-      else {
-        setSaveFailed(false);
+      if (decision.kind === 'write') {
+        keepStoredRef.current = false;
+        void saveJson(keys.game, decision.payload).then((ok) =>
+          setSaveNote(ok ? null : 'This device would not save the game, so it will not survive closing the app.'),
+        );
+      } else if (decision.kind === 'keep') {
+        // Either this game is too long to store, or there is a record we could
+        // not read: both mean leave what is on the device where it is.
+        setSaveNote(decision.problem);
+      } else {
+        setSaveNote(null);
         void removeKey(keys.game);
       }
     }, 250);
@@ -402,10 +421,8 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
         />
       ) : null}
       <View style={[styles.hintRow, replaying && { display: 'none' }]}>
-        <Text style={[styles.hint, game.error || linkProblem || saveFailed ? { color: colors.danger } : null]} numberOfLines={3}>
-          {game.error ??
-            linkProblem ??
-            (saveFailed ? 'This device would not save the game, so it will not survive closing the app.' : hint)}
+        <Text style={[styles.hint, game.error || linkProblem || saveNote ? { color: colors.danger } : null]} numberOfLines={3}>
+          {game.error ?? linkProblem ?? saveNote ?? hint}
         </Text>
         {puzzle && selection.kind === 'none' && humanTurn && state.status === 'playing' ? (
           <Button label={showHint ? 'Brief' : 'Hint'} small onPress={() => setShowHint((h) => !h)} />
@@ -501,9 +518,10 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
       />
       <ShareModal
         visible={shareOpen}
-        code={shareCode}
+        code={share.code}
+        problem={share.problem}
         onClose={() => setShareOpen(false)}
-        link={shareCode ? webLinkFor(shareCode) : null}
+        link={share.code ? webLinkFor(share.code) : null}
         onLoad={(code) => {
           const problem = loadCode(code);
           if (!problem) setShareOpen(false);

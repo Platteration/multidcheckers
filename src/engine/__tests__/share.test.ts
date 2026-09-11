@@ -1,32 +1,37 @@
 import { decode, encode } from '../../app/base64';
-import { decodeGame, encodeGame } from '../../app/share';
-import { Action, applyAction, enumerateActions, index, newGame } from '../index';
+import { MAX_BOARDS, MAX_TIMELINES, decodeGame, encodeGame, shareOffer, tooLargeToDraw } from '../../app/share';
+import { MAX_ACTIONS, actionsOf } from '../../app/setup';
+import { Action, GameState, Timeline, applyAction, index, newGame } from '../index';
+import { boardsIn, grownTo } from './helpers';
 
 /** A code built by hand, so a payload the app would never write can be tested. */
 const codeFor = (payload: unknown): string => '5DCK.' + encode(JSON.stringify(payload));
 
 const step = (from: number, to: number): Action => ({ type: 'move', timeline: 0, move: { from, path: [to], captures: [] } });
 
-/**
- * A legal game that takes a time travel whenever one is on offer, played until
- * it has that many timelines. This is the shape a code grows the multiverse
- * with: every travel adds a board to the timeline it leaves and forks another,
- * so it buys more boards per byte of code than anything else can.
- */
-function travelHeavy(timelines: number): { code: string; actions: Action[] } {
-  const actions: Action[] = [];
-  let state = newGame();
-  let nth = 0;
-  while (state.timelines.length < timelines && state.status === 'playing') {
-    const options = enumerateActions(state, 3);
-    const travels = options.filter((a) => a.type === 'travel');
-    const action = travels.length ? travels[nth++ % travels.length] : options[0];
-    if (!action) break;
-    actions.push(action);
-    state = applyAction(state, action);
-  }
-  return { code: codeFor({ v: 1, r: {}, m: 'local', a: actions }), actions };
+const LOCAL = { mode: 'local' } as const;
+
+/** A state of a size no game has to be played to reach: only the counts matter. */
+function sized(timelines: number, boards: number): GameState {
+  const start = newGame();
+  const board = start.timelines[0].boards[0];
+  const per = Math.floor(boards / timelines);
+  const rows: Timeline[] = Array.from({ length: timelines }, (_, id) => ({
+    id,
+    startTurn: 0,
+    boards: new Array(id === 0 ? boards - per * (timelines - 1) : per).fill(board),
+    createdBy: null,
+    branchedFrom: null,
+    origin: null,
+  }));
+  return { ...start, timelines: rows };
 }
+
+/**
+ * The biggest game the fastest-growing legal play reaches before a cap stops
+ * it, built once: several tests want the same expensive game.
+ */
+const OVER_THE_CEILING = grownTo(MAX_BOARDS + 1);
 
 describe('game codes', () => {
   it('round-trips text through base64', () => {
@@ -108,21 +113,83 @@ describe('game codes', () => {
 
   it('refuses a code that replays into more multiverse than an import may', () => {
     // Both caps above are counted on the code, and neither bounds what the code
-    // builds: a travel costs about 78 bytes and buys two boards and a whole
-    // timeline. So this one sits inside both of them with room to spare - which
-    // is what the two expectations below say - and still outgrows the import.
-    // The counts are from measured play, not from the constant under test: 400
-    // actions against the strongest bot, far longer than a game played by hand,
-    // reach 78 timelines, so a code of 88 has to load and one of 104 has to be
-    // refused for the ceiling to be anywhere sane between them.
-    const big = travelHeavy(104);
-    expect(big.code.length).toBeLessThan(64 * 1024);
-    expect(big.actions.length).toBeLessThan(2000);
-    expect(() => decodeGame(big.code)).toThrow(/too large for this app to draw/);
+    // builds: a travel buys two boards and a whole timeline for about 108
+    // characters. So this game sits inside both of them - which is what the two
+    // expectations below say - and is still refused for its size.
+    const code = encodeGame(OVER_THE_CEILING, LOCAL);
+    expect(code.length).toBeLessThan(64 * 1024);
+    expect(actionsOf(OVER_THE_CEILING).length).toBeLessThan(MAX_ACTIONS);
+    expect(() => decodeGame(code)).toThrow(/too large for this app to draw/);
+  });
 
-    // The same game stopped short of the ceiling still loads, so it is the size
-    // of the multiverse being refused above and not the shape of the actions.
-    const small = travelHeavy(88);
-    expect(decodeGame(small.code).history).toHaveLength(small.actions.length + 1);
+  it('loads the games a person actually plays, however they play them', () => {
+    // The ceiling this replaced was sized from bot games and refused a hand
+    // played game after 122 actions - five rounds of taking every time travel
+    // on offer - while the sending end still handed out the code. These counts
+    // are measured play, not the constants under test: 122 actions of it reach
+    // 97 timelines and 219 boards, and 400 actions against the strongest bot,
+    // far longer than most games, reach 78 timelines and 478 boards.
+    const played = grownTo(500);
+    expect(actionsOf(played).length).toBeGreaterThan(250);
+    expect(played[played.length - 1].timelines.length).toBeGreaterThan(200);
+    const loaded = decodeGame(encodeGame(played, LOCAL));
+    expect(loaded.history).toHaveLength(played.length);
+    expect(loaded.history[loaded.history.length - 1]).toEqual(played[played.length - 1]);
+  });
+
+  it('measures the multiverse by both of the things that cost, not just one', () => {
+    // Two halves, and the one that fires first in real play is the boards: the
+    // game above crosses the board cap while its timelines are still under
+    // theirs. A check that lost either half would take a state the map cannot
+    // draw. The sizes here are written out rather than derived from the caps,
+    // so moving a cap has to be a decision and not an accident.
+    expect(tooLargeToDraw(sized(97, 219))).toBe(false); // 122 actions of taking every travel
+    expect(tooLargeToDraw(sized(78, 478))).toBe(false); // 400 actions against the strongest bot
+    expect(tooLargeToDraw(sized(424, 950))).toBe(false); // 526 actions of taking every travel
+    expect(tooLargeToDraw(sized(20, 1400))).toBe(true);
+    expect(tooLargeToDraw(sized(700, 700))).toBe(true);
+    // Measured, not derived: the fastest-growing legal play crosses the board
+    // cap while its timelines are still short of theirs, so the half nobody
+    // pinned is the half that decides whether a real game can be sent.
+    const last = OVER_THE_CEILING[OVER_THE_CEILING.length - 1];
+    expect(boardsIn(last)).toBeGreaterThan(MAX_BOARDS);
+    expect(last.timelines.length).toBeLessThan(MAX_TIMELINES);
+  });
+});
+
+describe('what the share sheet offers', () => {
+  it('hands out no code the other end would refuse', () => {
+    // The sender cannot un-grow a game. A code offered for a game past any of
+    // the caps is one neither player - not even the sender, on a new device -
+    // could ever load, and the only sign of it was an error at the far end.
+    const offer = shareOffer(OVER_THE_CEILING, LOCAL);
+    expect(offer.code).toBeNull();
+    expect(offer.problem).toMatch(/cannot be sent/);
+    // And what it does offer, the loading end takes.
+    const played = grownTo(500);
+    const good = shareOffer(played, LOCAL);
+    expect(good.problem).toBeNull();
+    expect(decodeGame(good.code!).history).toHaveLength(played.length);
+  });
+
+  it('refuses on every cap the loading end applies, not only the multiverse', () => {
+    // A history of counts: these caps are arithmetic on the actions and the
+    // last state, and none of the three needs a game played to reach it.
+    const start = newGame();
+    const stretch = (n: number, action: Action, state = start): GameState[] => [
+      start,
+      ...new Array(n).fill({ ...state, lastAction: action }),
+    ];
+    const move: Action = { type: 'move', timeline: 0, move: { from: index(2, 1), path: [index(3, 0)], captures: [] } };
+    expect(shareOffer(stretch(MAX_ACTIONS + 1, { type: 'endTurn' }), LOCAL).problem).toMatch(/more moves than a code/);
+    // Under the action cap, over the byte cap: 1,200 moves are about 84 kB.
+    expect(shareOffer(stretch(1200, move), LOCAL).problem).toMatch(/too long to send/);
+    expect(shareOffer(stretch(3, move, sized(MAX_TIMELINES + 1, MAX_TIMELINES + 1)), LOCAL).problem).toMatch(/timelines/);
+  });
+
+  it('has nothing to offer before the first move, or for a puzzle', () => {
+    const played = grownTo(20);
+    expect(shareOffer([newGame()], LOCAL)).toEqual({ code: null, problem: null });
+    expect(shareOffer(played, { mode: 'puzzle', puzzleId: 'twoboards' })).toEqual({ code: null, problem: null });
   });
 });

@@ -7,20 +7,20 @@ import { keys, loadJson } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
 import { StatsProvider } from './src/app/stats';
 import { SettingsProvider, useSettings } from './src/app/settings';
-import { GameSetup, looksLikeSavedGame, normaliseSaved } from './src/app/setup';
+import { Restored, restoreSaved } from './src/app/setup';
 import { ThemeProvider, useTheme } from './src/app/theme';
-import type { GameState } from './src/engine';
 import { GameScreen } from './src/ui/GameScreen';
-
-type Saved = { history: GameState[]; setup: GameSetup };
 
 function Root() {
   const { ready } = useSettings();
   const colors = useTheme();
-  const [saved, setSaved] = useState<Saved | null | undefined>(undefined);
+  // undefined while storage is still being read; after that a game, nothing, or
+  // a record that is there and could not be replayed - which is still the only
+  // copy of the player's last game, so starting fresh over it must not delete it.
+  const [saved, setSaved] = useState<Restored | undefined>(undefined);
 
   useEffect(() => {
-    loadJson<unknown>(keys.game).then((v) => setSaved((looksLikeSavedGame(v) ? normaliseSaved(v) : null) ?? null));
+    loadJson<unknown>(keys.game).then((v) => setSaved(restoreSaved(v)));
   }, []);
 
   if (!ready || saved === undefined) {
@@ -33,7 +33,11 @@ function Root() {
   return (
     <>
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
-      <GameScreen initialHistory={saved?.history} initialSetup={saved?.setup} />
+      <GameScreen
+        initialHistory={saved.kind === 'game' ? saved.history : undefined}
+        initialSetup={saved.kind === 'game' ? saved.setup : undefined}
+        keepStoredGame={saved.kind === 'unreadable'}
+      />
     </>
   );
 }

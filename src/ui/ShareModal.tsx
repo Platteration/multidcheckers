@@ -9,6 +9,8 @@ interface Props {
   visible: boolean;
   /** The current game as a code, or null when there is nothing to share yet. */
   code: string | null;
+  /** Why this game cannot be sent, when a played game has outgrown a code. */
+  problem?: string | null;
   /** On the web, a link that opens this game directly. */
   link?: string | null;
   onLoad: (code: string) => string | null;
@@ -16,7 +18,7 @@ interface Props {
 }
 
 /** Share the game as a code and load one back: play by message, no server needed. */
-export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
+export function ShareModal({ visible, code, problem, link, onLoad, onClose }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pasted, setPasted] = useState('');
@@ -47,9 +49,9 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
   };
 
   const load = () => {
-    const problem = onLoad(pasted);
-    setNote(problem ?? 'Loaded. Your turn, or theirs.');
-    if (!problem) setPasted('');
+    const refusal = onLoad(pasted);
+    setNote(refusal ?? 'Loaded. Your turn, or theirs.');
+    if (!refusal) setPasted('');
   };
 
   return (
@@ -61,11 +63,15 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
             Send this code to a friend. They load it, make their move, and send the code back. Every timeline
             travels with it.
           </Text>
-          <ScrollView style={styles.codeBox} horizontal={false}>
-            <Text selectable style={styles.code}>
-              {code ?? 'Make a move first, then come back here.'}
-            </Text>
-          </ScrollView>
+          {problem ? (
+            <Text style={styles.problem}>{problem}</Text>
+          ) : (
+            <ScrollView style={styles.codeBox} horizontal={false}>
+              <Text selectable style={styles.code}>
+                {code ?? 'Make a move first, then come back here.'}
+              </Text>
+            </ScrollView>
+          )}
           <View style={styles.row}>
             <Button label="Copy" small onPress={copy} disabled={!code} />
             <View style={{ width: spacing.sm }} />
@@ -101,6 +107,15 @@ const makeStyles = (colors: Theme) =>
     body: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
     codeBox: { maxHeight: 80, marginVertical: spacing.sm, backgroundColor: colors.panelRaised, borderRadius: radius.md, padding: spacing.sm },
     code: { color: colors.text, fontSize: 11, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) },
+    problem: {
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 18,
+      marginVertical: spacing.sm,
+      backgroundColor: colors.panelRaised,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+    },
     row: { flexDirection: 'row' },
     input: {
       marginVertical: spacing.sm,
