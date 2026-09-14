@@ -79,6 +79,7 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
                 isSelected && styles.selectedPiece,
               ]}
             >
+              <View pointerEvents="none" style={styles.pieceShine} />
               {piece.king ? (
                 <Text style={[styles.crown, { fontSize: pieceSize * 0.55, color: colors.playersInk[piece.player] }]}>♛</Text>
               ) : patterns ? (
@@ -125,6 +126,7 @@ const makeStyles = (colors: Theme) =>
   board: {
     alignSelf: 'center',
     borderWidth: 3,
+    borderBottomWidth: 6,
     borderColor: colors.boardEdge,
     borderRadius: radius.sm,
     overflow: 'hidden',
@@ -134,10 +136,12 @@ const makeStyles = (colors: Theme) =>
   marked: { backgroundColor: '#a66e3f' },
   selectedSquare: { backgroundColor: '#5d7f9a' },
   piece: {
-    borderWidth: 2.5,
+    borderWidth: 2,
+    borderBottomWidth: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pieceShine: { position: 'absolute', top: '12%', left: '20%', width: '42%', height: '12%', borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.38)' },
   selectedPiece: { borderColor: colors.focus, borderWidth: 3.5 },
   crown: { fontWeight: '700', lineHeight: undefined },
   dot: { opacity: 0.95 },

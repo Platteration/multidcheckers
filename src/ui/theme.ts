@@ -43,32 +43,32 @@ type Base = Omit<
 
 const DARK: Base = {
   scheme: 'dark',
-  background: '#0d0f1f',
-  panel: '#171a33',
-  panelRaised: '#22264a',
-  border: '#2f3466',
-  text: '#f1f2ff',
-  textMuted: '#9a9fce',
-  travel: '#4de1ff',
-  focus: '#ffffff',
-  success: '#5cf08c',
-  warning: '#ffb547',
-  danger: '#ff5c7a',
+  background: '#19232d',
+  panel: '#24323e',
+  panelRaised: '#30424f',
+  border: '#526674',
+  text: '#f7f1e5',
+  textMuted: '#b7c2c7',
+  travel: '#88c9c0',
+  focus: '#fffaf0',
+  success: '#93c6a1',
+  warning: '#e8bd70',
+  danger: '#ef9290',
 };
 
 const LIGHT: Base = {
   scheme: 'light',
-  background: '#f3f4fb',
-  panel: '#ffffff',
-  panelRaised: '#e9ebf8',
-  border: '#cfd3ea',
-  text: '#15172b',
-  textMuted: '#5b6084',
-  travel: '#0a9fc6',
-  focus: '#15172b',
-  success: '#1e9a54',
-  warning: '#b86e00',
-  danger: '#d63b57',
+  background: '#f5f0e6',
+  panel: '#fffaf0',
+  panelRaised: '#e9e2d3',
+  border: '#b7b2a4',
+  text: '#24333e',
+  textMuted: '#5b6b72',
+  travel: '#296f69',
+  focus: '#24333e',
+  success: '#37734d',
+  warning: '#8e621f',
+  danger: '#b4424a',
 };
 
 export interface Skin {
@@ -169,4 +169,4 @@ export function playerColor(theme: Theme, p: Player): string {
 }
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-export const radius = { sm: 6, md: 10, lg: 16, pill: 999 };
+export const radius = { sm: 8, md: 12, lg: 16, pill: 999 };
