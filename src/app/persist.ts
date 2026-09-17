@@ -7,10 +7,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SETTINGS_KEY = 'settings.v1';
 const GAME_KEY = 'game.v1';
 
+function safeParse<T>(text: string): T {
+  return JSON.parse(text, (key, value) => {
+    return key === '__proto__' || key === 'constructor' || key === 'prototype' ? undefined : value;
+  }) as T;
+}
+
 export async function loadJson<T>(key: string): Promise<T | null> {
   try {
     const raw = await AsyncStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
+    return raw ? safeParse<T>(raw) : null;
   } catch {
     return null;
   }

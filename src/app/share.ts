@@ -8,6 +8,14 @@ import { decode, encode } from './base64';
 import { DEFAULT_SETUP, GameSetup } from './setup';
 
 const PREFIX = '5DCK.';
+const MAX_CODE_BYTES = 100000;
+const MAX_GAME_ACTIONS = 4000;
+
+function safeParse<T>(text: string): T {
+  return JSON.parse(text, (key, value) => {
+    return key === '__proto__' || key === 'constructor' || key === 'prototype' ? undefined : value;
+  }) as T;
+}
 
 interface Payload {
   v: 1;
@@ -30,11 +38,14 @@ export function decodeGame(code: string): { history: GameState[]; setup: GameSet
   if (!trimmed.startsWith(PREFIX)) throw new Error('This is not a 5D Checkers game code.');
   let payload: Payload;
   try {
-    payload = JSON.parse(decode(trimmed.slice(PREFIX.length))) as Payload;
+    const payloadText = decode(trimmed.slice(PREFIX.length));
+    if (payloadText.length > MAX_CODE_BYTES) throw new Error('That code is too long to load safely.');
+    payload = safeParse<Payload>(payloadText);
   } catch {
     throw new Error('That code is damaged and cannot be read.');
   }
   if (payload.v !== 1 || !Array.isArray(payload.a)) throw new Error('That code is from a version this app cannot read.');
+  if (payload.a.length > MAX_GAME_ACTIONS) throw new Error('That code is too long to load safely.');
   const history: GameState[] = [newGame(payload.r)];
   for (const action of payload.a) {
     try {
