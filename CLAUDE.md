@@ -1,5 +1,7 @@
 # multidcheckers
 
+Read AGENTS.md first. It holds the working rules every coding agent follows in this repository; this file adds the notes specific to this project.
+
 Expo (React Native + TypeScript) app: a 5D-chess-style multiverse time travel
 parody built on checkers. See README.md for the rules and layout.
 
