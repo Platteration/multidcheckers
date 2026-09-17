@@ -21,6 +21,22 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pasted, setPasted] = useState('');
   const [note, setNote] = useState<string | null>(null);
+  const MAX_PASTE_LENGTH = 12000;
+
+  const extractCode = (raw: string): string => {
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    const fromQuery = /[?&#]code=([^&#]+)/.exec(trimmed);
+    if (fromQuery) {
+      try {
+        return decodeURIComponent(fromQuery[1]);
+      } catch {
+        return fromQuery[1];
+      }
+    }
+    const afterSlash = trimmed.lastIndexOf('/') >= 0 ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : trimmed;
+    return afterSlash.replace(/[?#].*$/, '');
+  };
 
   const copy = async () => {
     if (!code) return;
@@ -47,7 +63,13 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
   };
 
   const load = () => {
-    const problem = onLoad(pasted);
+    const trimmed = extractCode(pasted);
+    if (!trimmed) return;
+    if (trimmed.length > MAX_PASTE_LENGTH) {
+      setNote('That code is too long to load safely.');
+      return;
+    }
+    const problem = onLoad(trimmed);
     setNote(problem ?? 'Loaded. Your turn, or theirs.');
     if (!problem) setPasted('');
   };
@@ -80,6 +102,7 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
             autoCapitalize="none"
             autoCorrect={false}
             multiline
+            maxLength={MAX_PASTE_LENGTH}
             style={styles.input}
             accessibilityLabel="Game code to load"
           />

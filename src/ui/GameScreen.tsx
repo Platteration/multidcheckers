@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Action,
@@ -111,12 +111,18 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
     Linking.getInitialURL()
       .then((url) => {
         const code = codeFromUrl(url);
-        if (code) loadCodeRef.current(code);
+        if (code) {
+          const problem = loadCodeRef.current(code);
+          if (problem) Alert.alert('Could not load shared game', problem);
+        }
       })
       .catch(() => {});
     const sub = Linking.addEventListener('url', ({ url }) => {
       const code = codeFromUrl(url);
-      if (code) loadCodeRef.current(code);
+      if (code) {
+        const problem = loadCodeRef.current(code);
+        if (problem) Alert.alert('Could not load shared game', problem);
+      }
     });
     return () => sub.remove();
   }, []);
