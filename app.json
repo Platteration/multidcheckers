@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0d0f1f",
+    "backgroundColor": "#19232d",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.platteration.multidcheckers"
@@ -15,7 +15,7 @@
     "android": {
       "package": "com.platteration.multidcheckers",
       "adaptiveIcon": {
-        "backgroundColor": "#0d0f1f",
+        "backgroundColor": "#19232d",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
