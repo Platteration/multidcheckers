@@ -107,13 +107,14 @@ artwork before a store release.
 
 ```sh
 npm test                  # unit tests (jest-expo)
+npm run lint              # eslint .
 npm run typecheck         # tsc --noEmit
 npm run test:conventions  # the shared repository conventions (CONVENTIONS.md)
 npm run check             # all of the above: the gate before a push
 ```
 
-`.github/workflows/ci.yml` runs the typecheck, the tests, the conventions test
-and an Android and web export on every push.
+`.github/workflows/ci.yml` runs the lint, the typecheck, the tests, the
+conventions test and an Android and web export on every push.
 
 ## Project layout
 
