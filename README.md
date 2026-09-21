@@ -85,14 +85,6 @@ go live: implement `purchase` and `restore` in that file against your store
 SDK, persist the result, and set the flag to true. The Settings sheet and the
 Extras sheet already respect the entitlement.
 
-## Building and shipping
-
-`.github/workflows/ci.yml` runs the typecheck, the tests, and a web export
-on every push. `eas.json` has development, preview, and production profiles
-for [EAS Build](https://docs.expo.dev/build/introduction/). The icons in
-`assets/` are generated, so replace them with real artwork before a store
-release.
-
 ## Running it
 
 ```sh
@@ -103,16 +95,25 @@ npm run android    # Android emulator or device
 npm run web        # in a browser
 ```
 
-Quality checks:
-
-```sh
-npm test           # unit tests (jest-expo)
-npm run typecheck  # tsc --noEmit
-```
+### Native builds
 
 To produce store builds use [EAS Build](https://docs.expo.dev/build/introduction/)
 (`npx eas build --platform ios|android`). The bundle identifiers are set in
-`app.json`.
+`app.json`. `eas.json` has development, preview, and production profiles
+for EAS Build. The icons in `assets/` are generated, so replace them with real
+artwork before a store release.
+
+## Development
+
+```sh
+npm test                  # unit tests (jest-expo)
+npm run typecheck         # tsc --noEmit
+npm run test:conventions  # the shared repository conventions (CONVENTIONS.md)
+npm run check             # all of the above: the gate before a push
+```
+
+`.github/workflows/ci.yml` runs the typecheck, the tests, the conventions test
+and an Android and web export on every push.
 
 ## Project layout
 
