@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { GameState, Player } from '../engine';
-import { loadJson, saveJson } from './persist';
+import { KEYS, loadJson, saveJson } from './persist';
 import type { GameSetup } from './setup';
+import { cleanStats } from './validate';
 
-const KEY = 'stats.v1';
+const KEY = KEYS.stats;
 
 export interface Record_ {
   played: number;
@@ -51,9 +52,9 @@ export function StatsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    loadJson<Stats>(KEY).then((s) => {
+    loadJson<unknown>(KEY).then((s) => {
       if (!alive) return;
-      if (s && typeof s.games === 'number') setStats({ ...EMPTY_STATS, ...s });
+      if (s) setStats(cleanStats(s, EMPTY_STATS));
       setReady(true);
     });
     return () => {

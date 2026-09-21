@@ -26,7 +26,7 @@ import {
 } from '../engine';
 import { useEntitlements } from '../app/entitlements';
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
-import { keys, removeKey, saveJson } from '../app/persist';
+import { KEYS, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
 import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
 import { narrate, variantsLabel } from '../app/narrate';
@@ -221,7 +221,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
     const timer = setTimeout(() => {
       if (decision.kind === 'write') {
         keepStoredRef.current = false;
-        void saveJson(keys.game, decision.payload).then((ok) =>
+        void saveJson(KEYS.game, decision.payload).then((ok) =>
           setSaveNote(ok ? null : 'This device would not save the game, so it will not survive closing the app.'),
         );
       } else if (decision.kind === 'keep') {
@@ -230,7 +230,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
         setSaveNote(decision.problem);
       } else {
         setSaveNote(null);
-        void removeKey(keys.game);
+        void removeKey(KEYS.game);
       }
     }, 250);
     return () => clearTimeout(timer);

@@ -129,7 +129,8 @@ src/engine/__tests__/      unit tests for the rules, bots, puzzles, game codes,
 src/puzzles/index.ts       the puzzle set (each verified by a test)
 src/app/settings.tsx       persisted settings (theme, skin, sound, variants)
 src/app/theme.tsx          resolves settings into the palette screens draw with
-src/app/persist.ts         AsyncStorage helpers; app/progress.tsx for puzzle progress
+src/app/persist.ts         every storage key, the key migration, AsyncStorage helpers
+src/app/validate.ts        what a stored record may contain; every read goes through it
 src/app/share.ts           game codes for play by message (app/base64.ts)
 src/app/setup.ts           how a game is set up, and the autosave format
 src/app/purchases.ts       the store seam; app/entitlements.tsx gates premium looks

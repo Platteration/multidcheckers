@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { EntitlementsProvider } from './src/app/entitlements';
-import { keys, loadJson } from './src/app/persist';
+import { KEYS, loadJson } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
 import { StatsProvider } from './src/app/stats';
 import { SettingsProvider, useSettings } from './src/app/settings';
@@ -20,7 +20,7 @@ function Root() {
   const [saved, setSaved] = useState<Restored | undefined>(undefined);
 
   useEffect(() => {
-    loadJson<unknown>(keys.game).then((v) => setSaved(restoreSaved(v)));
+    loadJson<unknown>(KEYS.game).then((v) => setSaved(restoreSaved(v)));
   }, []);
 
   if (!ready || saved === undefined) {

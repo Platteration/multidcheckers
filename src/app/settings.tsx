@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { keys, loadJson, saveJson } from './persist';
+import { DEFAULT_RULES } from '../engine';
+import { KEYS, loadJson, saveJson } from './persist';
+import { cleanSettings } from './validate';
 
 export type ThemeChoice = 'system' | 'dark' | 'light';
 
@@ -15,7 +17,7 @@ export interface Settings {
   skin: string;
   /** Piece set id, see ui/skins. */
   pieces: string;
-  /** Optional rule variants, keyed by name. */
+  /** Optional rule variants, keyed by name; every name the engine knows is present. */
   variants: Record<string, boolean>;
   /** The first-launch walkthrough has been seen (or skipped). */
   welcomed: boolean;
@@ -28,7 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   skin: 'classic',
   pieces: 'classic',
-  variants: {},
+  variants: { ...DEFAULT_RULES },
   welcomed: false,
 };
 
@@ -53,9 +55,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    loadJson<Partial<Settings>>(keys.settings).then((stored) => {
+    // Clamped on the way in, field by field: an unknown theme, skin or piece
+    // set would otherwise index a palette table to undefined on every render.
+    loadJson<unknown>(KEYS.settings).then((stored) => {
       if (!alive) return;
-      if (stored) setSettings({ ...DEFAULT_SETTINGS, ...stored, variants: { ...DEFAULT_SETTINGS.variants, ...(stored.variants ?? {}) } });
+      if (stored) setSettings(cleanSettings(stored, DEFAULT_SETTINGS));
       setReady(true);
     });
     return () => {
@@ -64,7 +68,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (ready) void saveJson(keys.settings, settings);
+    if (ready) void saveJson(KEYS.settings, settings);
   }, [settings, ready]);
 
   const update = useCallback((patch: Partial<Settings>) => {
