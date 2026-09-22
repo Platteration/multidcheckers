@@ -67,7 +67,15 @@ export async function migrateLegacyKeys(): Promise<void> {
   }
 }
 
-/** Awaited by every read and write, so no provider can race ahead of the move. */
+/**
+ * Awaited by every read, every write and every removal, so nothing can race
+ * ahead of the move. The removal is the one that reads like belt and braces and
+ * is not: a remove that overtakes the migration finds nothing to remove, and
+ * the copy that follows puts the record back. That is the error boundary's
+ * "start a new game" deleting the game that crashed, and the game returning on
+ * the next launch. `validate.test.ts` drives all three against a migration held
+ * in flight.
+ */
 export const migrated: Promise<void> = migrateLegacyKeys();
 
 export async function loadJson<T>(key: string): Promise<T | null> {

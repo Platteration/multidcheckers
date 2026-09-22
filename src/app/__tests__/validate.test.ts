@@ -30,16 +30,26 @@ import {
   cleanVariants,
 } from '../validate';
 
-/** AsyncStorage, in memory, with a switch that makes every write fail. */
+/**
+ * AsyncStorage, in memory, with a switch that makes every write fail and a hook
+ * that fires as a key is read - which is how a call can be staged *inside* the
+ * migration, in the window between its look for the new key and its copy of the
+ * old one.
+ */
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   const flags = { failWrites: false };
+  const hooks: { onRead?: (key: string) => void } = {};
   return {
     __esModule: true,
     __store: store,
     __flags: flags,
+    __hooks: hooks,
     default: {
-      getItem: async (key: string) => (store.has(key) ? store.get(key)! : null),
+      getItem: async (key: string) => {
+        hooks.onRead?.(key);
+        return store.has(key) ? store.get(key)! : null;
+      },
       setItem: async (key: string, value: string) => {
         if (flags.failWrites) throw new Error('QuotaExceededError');
         store.set(key, value);
@@ -50,9 +60,14 @@ jest.mock('@react-native-async-storage/async-storage', () => {
     },
   };
 });
-const { __store: mockStore, __flags: mockFlags } = jest.requireMock('@react-native-async-storage/async-storage') as {
+const {
+  __store: mockStore,
+  __flags: mockFlags,
+  __hooks: mockHooks,
+} = jest.requireMock('@react-native-async-storage/async-storage') as {
   __store: Map<string, string>;
   __flags: { failWrites: boolean };
+  __hooks: { onRead?: (key: string) => void };
 };
 
 /** `constructor`, `toString`, `__proto__`, ...: the names a plain-object table answers for. */
@@ -277,5 +292,51 @@ describe('migrateLegacyKeys', () => {
     expect(mockStore.has(LEGACY_KEYS.stats)).toBe(false);
     // And this module's own import-time run is what its reads wait on too.
     expect(await loadJson<{ games: number }>(KEYS.stats)).toEqual({ games: 7 });
+  });
+
+  /** A build that has never run before, on a phone that still has the bare keys. */
+  function firstLaunch(record: string): typeof import('../persist') {
+    mockStore.clear();
+    mockStore.set(record, JSON.stringify({ version: 3, from: 'the old key' }));
+    let fresh!: typeof import('../persist');
+    jest.isolateModules(() => {
+      fresh = jest.requireActual<typeof import('../persist')>('../persist');
+    });
+    return fresh;
+  }
+
+  afterEach(() => {
+    mockHooks.onRead = undefined;
+  });
+
+  it('is waited for by a write, not only by a read', async () => {
+    // Staged in the one window where it matters: the save is issued while the
+    // migration has already looked for the new key and has not yet copied the
+    // old one over. A write that does not wait lands first and the copy then
+    // lands on top of it, so the move undoes what the player just did.
+    const fresh = firstLaunch(LEGACY_KEYS.game);
+    const mine = { version: 3, from: 'the game being played' };
+    let saved: Promise<boolean> | null = null;
+    mockHooks.onRead = (key) => {
+      if (key === LEGACY_KEYS.game && !saved) saved = fresh.saveJson(KEYS.game, mine);
+    };
+    await fresh.migrated;
+    expect(saved).not.toBeNull();
+    expect(await saved!).toBe(true);
+    expect(JSON.parse(mockStore.get(KEYS.game)!)).toEqual(mine);
+  });
+
+  it('is waited for by a removal, which is the one that undoes itself', async () => {
+    // The error boundary's "start a new game" and the autosave's clear are both
+    // removeKey. A removal that overtakes the migration finds nothing under the
+    // new key, and the copy that follows puts the record back: the game that
+    // crashed the app returns on the next launch and the one button out of it
+    // did nothing.
+    const fresh = firstLaunch(LEGACY_KEYS.game);
+    const removed = fresh.removeKey(KEYS.game);
+    await fresh.migrated;
+    await removed;
+    expect(mockStore.has(KEYS.game)).toBe(false);
+    expect(mockStore.has(LEGACY_KEYS.game)).toBe(false);
   });
 });
