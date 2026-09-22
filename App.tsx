@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { EntitlementsProvider } from './src/app/entitlements';
-import { KEYS, loadJson, removeKey } from './src/app/persist';
+import { KEYS, loadJson, removeKey, setAsideGame } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
 import { StatsProvider } from './src/app/stats';
 import { SettingsProvider, useSettings } from './src/app/settings';
@@ -21,7 +21,16 @@ function Root() {
   const [saved, setSaved] = useState<Restored | undefined>(undefined);
 
   useEffect(() => {
-    loadJson<unknown>(KEYS.game).then((v) => setSaved(restoreSaved(v)));
+    loadJson<unknown>(KEYS.game).then(async (v) => {
+      const restored = restoreSaved(v);
+      // A record this build cannot replay fails the same way at every launch,
+      // and the replay it fails partway through is the expensive part of the
+      // launch. It is moved aside rather than tried again or deleted: kept on
+      // the device, never offered again, and said out loud on the screen that
+      // starts fresh over it (saveDecision's note).
+      if (restored.kind === 'unreadable') await setAsideGame(v);
+      setSaved(restored);
+    });
   }, []);
 
   if (!ready || saved === undefined) {

@@ -374,11 +374,19 @@ describe('what leaves the device', () => {
   });
 
   it('keeps the saved game in Android backup', () => {
-    // The store is one in-progress game plus the settings (src/app/persist.ts):
-    // nothing sensitive, nothing that identifies anyone, and the only effect
-    // `false` would have is losing a half-played game when the phone is
-    // migrated. Stated explicitly rather than left to the plugin default so
-    // that the choice, and this reason, are in the file.
+    // The store is the six records in KEYS (src/app/persist.ts): the settings,
+    // the game in progress, the record, puzzle progress, the entitlements and
+    // a save that could not be read. Nothing sensitive, nothing that identifies
+    // anyone, and the only effect `false` would have is losing a half-played
+    // game when the phone is migrated. Stated explicitly rather than left to
+    // the plugin default so that the choice, and this reason, are in the file.
+    //
+    // The entitlement record rides along, which is free while STORE_ENABLED is
+    // false and every cosmetic is unlocked for everyone. Wiring up a store is
+    // what makes a restored - or adb-planted - entitlements record worth
+    // something, and the answer then is backup rules that exclude it (tvsham
+    // writes its own), not a blanket allowBackup: false that would also throw
+    // away the player's game.
     expect(appConfig.android.allowBackup).toBe(true);
     expect(manifest.application[0].$['android:allowBackup']).toBe('true');
   });

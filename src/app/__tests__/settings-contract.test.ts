@@ -32,17 +32,18 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 const { __store: store } = jest.requireMock('@react-native-async-storage/async-storage') as { __store: Map<string, string> };
 
 describe('storage keys', () => {
-  it('are the five prefixed, versioned keys', () => {
+  it('are the six prefixed, versioned keys', () => {
     expect(KEYS).toEqual({
       settings: 'multidcheckers.settings.v1',
       game: 'multidcheckers.game.v1',
       stats: 'multidcheckers.stats.v1',
       progress: 'multidcheckers.progress.v1',
       entitlements: 'multidcheckers.entitlements.v1',
+      setAside: 'multidcheckers.setaside.v1',
     });
   });
 
-  it('migrate from the bare keys every earlier build wrote', () => {
+  it('migrate from the bare keys every earlier build wrote - all but the newest record', () => {
     expect(LEGACY_KEYS).toEqual({
       settings: 'settings.v1',
       game: 'game.v1',
@@ -116,6 +117,7 @@ describe('reset to defaults', () => {
       [KEYS.stats]: '{"games":4}',
       [KEYS.progress]: '{"solved":["sweep"]}',
       [KEYS.entitlements]: '{"supporter":true}',
+      [KEYS.setAside]: '{"version":1,"history":[]}',
     };
     store.clear();
     store.set(KEYS.settings, JSON.stringify(changed));
@@ -139,6 +141,6 @@ describe('reset to defaults', () => {
     expect(api.settings).toEqual({ ...DEFAULT_SETTINGS, welcomed: true });
     expect(JSON.parse(store.get(KEYS.settings)!)).toEqual({ ...DEFAULT_SETTINGS, welcomed: true });
     for (const [key, value] of Object.entries(others)) expect(store.get(key)).toBe(value);
-    expect(store.size).toBe(5);
+    expect(store.size).toBe(6);
   });
 });

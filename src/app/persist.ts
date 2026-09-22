@@ -18,12 +18,22 @@ export const KEYS = {
   stats: 'multidcheckers.stats.v1',
   progress: 'multidcheckers.progress.v1',
   entitlements: 'multidcheckers.entitlements.v1',
+  /**
+   * The last saved game this build could not replay (see `setAsideGame`).
+   * Written when a record is set aside and never read back by the app: it is
+   * here so that refusing to replay somebody's game is not the same as
+   * deleting it.
+   */
+  setAside: 'multidcheckers.setaside.v1',
 } as const;
 
 export type StoredRecord = keyof typeof KEYS;
 
+/** The records that predate the prefixed keys. The set-aside one does not. */
+export type MigratedRecord = Exclude<StoredRecord, 'setAside'>;
+
 /** The bare keys every build before the prefix wrote, one per record. */
-export const LEGACY_KEYS: Record<StoredRecord, string> = {
+export const LEGACY_KEYS: Record<MigratedRecord, string> = {
   settings: 'settings.v1',
   game: 'game.v1',
   stats: 'stats.v1',
@@ -48,7 +58,7 @@ export const LEGACY_KEYS: Record<StoredRecord, string> = {
  */
 export async function migrateLegacyKeys(): Promise<void> {
   const shared = Platform.OS === 'web';
-  for (const record of Object.keys(KEYS) as StoredRecord[]) {
+  for (const record of Object.keys(LEGACY_KEYS) as MigratedRecord[]) {
     const from = LEGACY_KEYS[record];
     const to = KEYS[record];
     try {
@@ -106,4 +116,25 @@ export async function removeKey(key: string): Promise<void> {
   } catch {
     // Ignore.
   }
+}
+
+/**
+ * A saved game this build could not replay: keep the bytes, stop offering them.
+ *
+ * Refusing such a record is right - replaying half of it would rebuild a game
+ * nobody played - but leaving it where it is means trying it again at every
+ * launch, for ever, at the cost of the whole replay each time, and saying
+ * nothing to the player about the game they cannot see any more. So it is moved
+ * aside: attempted once, kept for good, and not deleted, because the fault may
+ * well be ours and a later build may read it perfectly. Only the most recent
+ * one is kept; a second unreadable record writes over the first.
+ *
+ * The copy comes first and the removal only after it succeeded, the way the
+ * key migration does it: a failed write leaves the record exactly where it was,
+ * and the next launch tries again rather than losing it.
+ */
+export async function setAsideGame(record: unknown): Promise<boolean> {
+  if (!(await saveJson(KEYS.setAside, record))) return false;
+  await removeKey(KEYS.game);
+  return true;
 }

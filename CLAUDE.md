@@ -21,8 +21,14 @@ socket), so `android.blockedPermissions` takes INTERNET, the legacy storage pair
 media-read set and the template's SYSTEM_ALERT_WINDOW back out of the shipped build;
 `plugins/withDebugInternet.js` adds INTERNET to
 `android/app/src/debug/AndroidManifest.xml` alone at prebuild so a dev client can still
-fetch its bundle. `allowBackup` is an explicit `true`: the store is one in-progress game
-plus settings. The test runs `expo config --type introspect` (the merged manifest, not
+fetch its bundle. `allowBackup` is an explicit `true`: the store is the player's own six
+records and nothing else — the settings, the game in progress, the record, puzzle progress,
+the entitlements and the save that could not be read (`KEYS` in `src/app/persist.ts`) —
+so a restore brings back a half-played game rather than anything worth protecting. The
+entitlement record travels with them, which costs nothing while `STORE_ENABLED` is false
+and every cosmetic is free; wiring a store up means deciding whether a restored (or
+adb-planted) `multidcheckers.entitlements.v1` may unlock the Supporter pack, and if not,
+this is where the backup rules that exclude it go (tvsham writes its own for that reason). The test runs `expo config --type introspect` (the merged manifest, not
 app.json) and scans every AndroidManifest.xml under node_modules, so a module someone
 adds tomorrow that declares a permission fails it until the permission is either used or
 blocked. `tsconfig.json` lists `node` in `types` for that test; `@types/node` is a
@@ -31,8 +37,13 @@ declared devDependency for the same reason, pinned to the Node major CI runs (^2
 ## Settings
 
 Every stored record has one key, named in `KEYS` in `src/app/persist.ts`:
-`multidcheckers.{settings,game,stats,progress,entitlements}.v1`. The bare keys earlier
-builds wrote (`settings.v1` and the rest) migrate on first launch — new key wins when
+`multidcheckers.{settings,game,stats,progress,entitlements}.v1`, plus
+`multidcheckers.setaside.v1` — the last saved game this build could not replay, moved
+there by `setAsideGame` so that it is attempted once rather than at every launch, kept
+rather than deleted (the fault may be ours), and never read back by the app; the screen
+says so where the hint is (`UNREADABLE_SAVE_NOTE`). The bare keys earlier
+builds wrote (`settings.v1` and the rest, which the set-aside record predates nothing of)
+migrate on first launch — new key wins when
 both are present, bytes are copied verbatim, the old key is deleted only after the write
 succeeded and never on the web, where AsyncStorage is localStorage keyed by an origin
 the sibling game shares — and `loadJson` awaits the migration, so no provider can read

@@ -11,7 +11,7 @@
 import { Platform } from 'react-native';
 import { DEFAULT_RULES } from '../../engine';
 import { PIECE_SETS, SKINS } from '../../ui/theme';
-import { KEYS, LEGACY_KEYS, StoredRecord, loadJson, migrateLegacyKeys, saveJson } from '../persist';
+import { KEYS, LEGACY_KEYS, MigratedRecord, loadJson, migrateLegacyKeys, saveJson, setAsideGame } from '../persist';
 import { EMPTY_PROGRESS } from '../progress';
 import { NO_ENTITLEMENTS } from '../purchases';
 import { DEFAULT_SETTINGS, Settings } from '../settings';
@@ -203,7 +203,8 @@ describe('cleanEntitlements', () => {
 });
 
 describe('migrateLegacyKeys', () => {
-  const RECORDS = Object.keys(KEYS) as StoredRecord[];
+  /** The records that have a bare key to move. The set-aside one is newer than the prefix. */
+  const RECORDS = Object.keys(LEGACY_KEYS) as MigratedRecord[];
   /** Bytes that are deliberately not valid JSON: the copy must not judge them. */
   const OLD = (r: string) => `{"from":"old ${r}"`;
   const NEW = (r: string) => `{"from":"new ${r}"}`;
@@ -338,5 +339,44 @@ describe('migrateLegacyKeys', () => {
     await removed;
     expect(mockStore.has(KEYS.game)).toBe(false);
     expect(mockStore.has(LEGACY_KEYS.game)).toBe(false);
+  });
+});
+
+describe('setting an unreadable game aside', () => {
+  const RECORD = { version: 2, history: [{ lastAction: null }] };
+
+  beforeEach(() => {
+    mockStore.clear();
+    mockFlags.failWrites = false;
+  });
+
+  it('copies the record to its own key and only then takes it off the game key', async () => {
+    // Kept, not deleted: the record is the only copy of the player's last game
+    // and the fault may well be ours. Not offered again either: it fails the
+    // same way at every launch, and the replay it fails partway through is the
+    // expensive part of one.
+    mockStore.set(KEYS.game, JSON.stringify(RECORD));
+    expect(await setAsideGame(RECORD)).toBe(true);
+    expect(mockStore.has(KEYS.game)).toBe(false);
+    expect(JSON.parse(mockStore.get(KEYS.setAside)!)).toEqual(RECORD);
+  });
+
+  it('keeps the record where it is when the copy cannot be written', async () => {
+    // A full or missing store must not turn "set aside" into "deleted". The
+    // next launch finds the record exactly where it was and tries again.
+    mockStore.set(KEYS.game, JSON.stringify(RECORD));
+    mockFlags.failWrites = true;
+    expect(await setAsideGame(RECORD)).toBe(false);
+    expect(JSON.parse(mockStore.get(KEYS.game)!)).toEqual(RECORD);
+    expect(mockStore.has(KEYS.setAside)).toBe(false);
+  });
+
+  it('keeps the most recent one, and touches no other record', async () => {
+    mockStore.set(KEYS.settings, '{"haptics":false}');
+    mockStore.set(KEYS.setAside, JSON.stringify({ version: 1, history: [] }));
+    mockStore.set(KEYS.game, JSON.stringify(RECORD));
+    expect(await setAsideGame(RECORD)).toBe(true);
+    expect(JSON.parse(mockStore.get(KEYS.setAside)!)).toEqual(RECORD);
+    expect(mockStore.get(KEYS.settings)).toBe('{"haptics":false}');
   });
 });

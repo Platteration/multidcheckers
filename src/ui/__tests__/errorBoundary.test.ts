@@ -104,9 +104,16 @@ function Thrower(): never {
 const boundary = (onReset: () => void, child: React.ReactNode) =>
   React.createElement(ErrorBoundary, { onReset } as React.ComponentProps<typeof ErrorBoundary>, child);
 
-/** A record under every key the app keeps, so the reset's reach can be measured. */
+/**
+ * A record under every key the app keeps, so the reset's reach can be measured.
+ * The game key gets a real (if empty) save: a record the launch cannot replay
+ * is set aside by App.tsx, which would move the very key this file is watching.
+ */
+const SAVED_GAME = { version: 3, rules: {}, setup: { mode: 'local' }, actions: [] };
 async function seedEveryKey(): Promise<void> {
-  for (const key of Object.values(KEYS)) await AsyncStorage.setItem(key, JSON.stringify({ seeded: key }));
+  for (const key of Object.values(KEYS)) {
+    await AsyncStorage.setItem(key, JSON.stringify(key === KEYS.game ? SAVED_GAME : { seeded: key }));
+  }
 }
 
 // React reports a caught render error on the console; that report is the

@@ -130,7 +130,9 @@ describe('a saved game that could not be read', () => {
     // it and keeps the record instead, so what must reach the screen is the
     // instruction not to clear it, and the reason, where the hint is.
     const app = source('../../App.tsx');
-    expect(app).toMatch(/setSaved\(restoreSaved\(v\)\)/);
+    expect(app).toMatch(/const restored = restoreSaved\(v\);/);
+    expect(app).toMatch(/setSaved\(restored\);/);
+    expect(app).toMatch(/if \(restored\.kind === 'unreadable'\) await setAsideGame\(v\);/);
     expect(app).toMatch(/keepStoredGame=\{saved\.kind === 'unreadable'\}/);
     const screen = source('GameScreen.tsx');
     expect(screen).toMatch(/const keepStoredRef = useRef\(!!keepStoredGame\);/);

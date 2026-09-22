@@ -21,6 +21,7 @@ import {
   normaliseSaved,
   restoreSaved,
   saveDecision,
+  UNREADABLE_SAVE_NOTE,
 } from '../../app/setup';
 import { grownTo } from './helpers';
 
@@ -161,11 +162,23 @@ describe('what the autosave writes', () => {
     // The fresh game started over an unreadable record has nothing to save, and
     // "nothing to save" used to mean "remove whatever is there" - which is the
     // player's last game, thrown away to match a game they have not played.
-    expect(saveDecision([newGame()], LOCAL, false)).toEqual({ kind: 'keep', problem: null });
+    expect(saveDecision([newGame()], LOCAL, false)).toEqual({ kind: 'keep', problem: UNREADABLE_SAVE_NOTE });
     const finished = GAME.map((state) => ({ ...state, status: 'draw' as const }));
-    expect(saveDecision(finished, LOCAL, false)).toEqual({ kind: 'keep', problem: null });
+    expect(saveDecision(finished, LOCAL, false)).toEqual({ kind: 'keep', problem: UNREADABLE_SAVE_NOTE });
     // Once the player plays, their own game is written over it, as it should be.
     expect(saveDecision(GAME.slice(0, 5), LOCAL, false).kind).toBe('write');
+  });
+
+  it('says so, rather than leaving a fresh board to speak for itself', () => {
+    // The record used to be kept in silence: no note, nothing on the hint line,
+    // and a player whose unfinished game had simply become an empty board. The
+    // note goes where the hint is (GameScreen, pinned in guards.test.ts), and
+    // it promises only what holds whether or not the record could be moved.
+    expect(UNREADABLE_SAVE_NOTE).toMatch(/could not be read/);
+    expect(UNREADABLE_SAVE_NOTE).toMatch(/not been deleted/);
+    // ...and nothing is said when there was no such record: a normal fresh
+    // start is not an incident.
+    expect(saveDecision([newGame()], LOCAL)).toEqual({ kind: 'clear' });
   });
 });
 

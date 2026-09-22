@@ -93,7 +93,7 @@ export type SaveDecision =
  */
 export function saveDecision(history: GameState[], setup: GameSetup, mayClear = true): SaveDecision {
   const nothingToSave = history.length <= 1 || history[history.length - 1].status !== 'playing';
-  if (nothingToSave) return mayClear ? { kind: 'clear' } : { kind: 'keep', problem: null };
+  if (nothingToSave) return mayClear ? { kind: 'clear' } : { kind: 'keep', problem: UNREADABLE_SAVE_NOTE };
   const actions = actionsOf(history);
   // Bounded where the list is written, not only where it is read. The read-side
   // cap refuses a record this long, and a refusal at launch cannot ask the
@@ -106,6 +106,17 @@ export function saveDecision(history: GameState[], setup: GameSetup, mayClear = 
   }
   return { kind: 'write', payload: { version: 3, actions, rules: history[0].rules, setup } };
 }
+
+/**
+ * What the player is told when the game they left is not the game in front of
+ * them. A record that could not be replayed is set aside rather than deleted
+ * (`setAsideGame`), and a fresh board appearing where an unfinished game was is
+ * the kind of thing an app owes somebody an explanation for: silence reads as
+ * "it lost my game". Short enough for the hint line, and it promises only what
+ * is true either way - the record is not deleted, whether or not the move
+ * aside succeeded.
+ */
+export const UNREADABLE_SAVE_NOTE = 'Your last game could not be read, so this is a fresh board. It has not been deleted.';
 
 /**
  * How many actions either path will replay. A pasted code and a stored game
