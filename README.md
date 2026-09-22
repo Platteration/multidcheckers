@@ -125,7 +125,7 @@ conventions test and an Android and web export on every push.
 ## Project layout
 
 ```
-App.tsx                    entry: safe area + status bar + GameScreen
+App.tsx                    entry: safe area + status bar + error boundary + GameScreen
 src/engine/types.ts        players, board references, turn parity
 src/engine/board.ts        one checkers board: moves, jump chains, kings
 src/engine/multiverse.ts   timelines, pending boards, time travel, rules, win/draw
@@ -148,6 +148,7 @@ src/ui/CheckerBoard.tsx    the big tappable board with the landing animation
 src/ui/MiniBoard.tsx       board thumbnails for the map
 src/ui/MultiverseMap.tsx   the timeline map (rows = timelines, columns = turns)
 src/ui/*Modal.tsx          menu, rules, settings, new game, puzzles, share, extras
+src/ui/ErrorBoundary.tsx   the fallback for a render that throws; its button clears the saved game
 src/ui/__tests__/          contrast checks on the header text, which is drawn
                            straight on the background
 ```

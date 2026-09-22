@@ -3,12 +3,13 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { EntitlementsProvider } from './src/app/entitlements';
-import { KEYS, loadJson } from './src/app/persist';
+import { KEYS, loadJson, removeKey } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
 import { StatsProvider } from './src/app/stats';
 import { SettingsProvider, useSettings } from './src/app/settings';
 import { Restored, restoreSaved } from './src/app/setup';
 import { ThemeProvider, useTheme } from './src/app/theme';
+import { ErrorBoundary } from './src/ui/ErrorBoundary';
 import { GameScreen } from './src/ui/GameScreen';
 
 function Root() {
@@ -43,6 +44,9 @@ function Root() {
 }
 
 export default function App() {
+  // Bumping the key remounts everything below it, which is how the error
+  // boundary's "start a new game" gets a clean tree after clearing the save.
+  const [generation, setGeneration] = useState(0);
   return (
     <SettingsProvider>
       <ThemeProvider>
@@ -50,7 +54,15 @@ export default function App() {
           <EntitlementsProvider>
             <StatsProvider>
               <SafeAreaProvider>
-                <Root />
+                <ErrorBoundary
+                  key={generation}
+                  onReset={() => {
+                    void removeKey(KEYS.game);
+                    setGeneration((g) => g + 1);
+                  }}
+                >
+                  <Root />
+                </ErrorBoundary>
               </SafeAreaProvider>
             </StatsProvider>
           </EntitlementsProvider>
