@@ -68,9 +68,12 @@ opponent must defend, or pull a doomed piece out of the present.
   real tiny multiverse, and offers the puzzles.
 - **Links.** A game code also loads from a link: `?code=` on the web build
   and the app's own scheme on a device.
-- **Fits the screen.** Portrait stacks the board over the map; wide screens
-  put them side by side. The map draws a line from each branch to the board
-  it split off, and a time travel flies a token across it.
+- **Fits the screen.** On a device the app is locked to portrait
+  (`orientation` in `app.json`), so the board stacks over the map; the
+  side-by-side layout the screen keeps for a window wider than it is tall is
+  what the web build shows in a wide browser window. The map draws a line
+  from each branch to the board it split off, and a time travel flies a token
+  across it.
 - **Saved automatically.** The game in progress, settings, record, and
   puzzle progress survive closing the app.
 
@@ -102,8 +105,9 @@ npm run web        # in a browser
 To produce store builds use [EAS Build](https://docs.expo.dev/build/introduction/)
 (`npx eas build --platform ios|android`). The bundle identifiers are set in
 `app.json`. `eas.json` has development, preview, and production profiles
-for EAS Build. The icons in `assets/` are generated, so replace them with real
-artwork before a store release.
+for EAS Build. The icons in `assets/` are placeholders (nothing in the
+repository generates them), so replace them with real artwork before a store
+release.
 
 ## Development
 
