@@ -90,6 +90,28 @@ const appSources = (): string[] => {
 const withoutComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
+/**
+ * What a socket looks like in this app's own source. The module names are
+ * matched as they appear in an import; the call names are the ones that reach
+ * the network through a module that is already installed for something else
+ * (expo-file-system's transfers) or through the platform itself (sendBeacon,
+ * EventSource, `new Request`). Each was verified by dropping a file that uses
+ * it into src/ and watching this fail.
+ */
+const NETWORK_PRIMITIVE =
+  /\bfetch\(|axios|XMLHttpRequest|WebSocket|EventSource|sendBeacon|\bnew Request\(|downloadAsync|uploadAsync|createDownloadResumable|openBrowserAsync|expo-network|expo-updates|expo-auth-session|react-native-webview|@react-native-community\/netinfo/;
+/** ...plus the two things that are allowed exactly once, in the About card. */
+const NETWORK_CODE = new RegExp(`${NETWORK_PRIMITIVE.source}|openURL|['"\`]https?:`);
+/** Packages that cannot be in this app for any reason but talking to a network. */
+const NETWORK_PACKAGES = [
+  'expo-network',
+  'expo-updates',
+  'expo-auth-session',
+  'react-native-webview',
+  '@react-native-community/netinfo',
+  'axios',
+];
+
 const pluginOptions = (name: string): Json => {
   const entry = appConfig.plugins.find((p: unknown) => (Array.isArray(p) ? p[0] : p) === name);
   expect(entry).toBeDefined();
@@ -258,16 +280,38 @@ describe('what leaves the device', () => {
     // Linking hands to the browser: no socket of the app's own. It is pinned
     // by file and by value, so a second URL, or that one anywhere else, or
     // anything but openURL reaching it, is still a finding.
+    //
+    // A socket is not always spelled `fetch`. The primitives below are the
+    // ones a scan can see; each was probed by dropping a module into src/ and
+    // running this test. What it cannot see is a call assembled at runtime -
+    // `globalThis['fet' + 'ch']` passes this and always will, because a
+    // regular expression over source is not an evaluator. That is what the two
+    // guards either side of it are for: the shipped manifest carries no
+    // INTERNET (the test below), so such a call fails on the device rather
+    // than reaching anywhere, and the dependency list is pinned here as well,
+    // so the module that would carry it cannot arrive unnoticed either.
     const files = appSources();
     expect(files.length).toBeGreaterThan(10);
-    const network = /\bfetch\(|axios|XMLHttpRequest|WebSocket|openURL|openBrowserAsync|expo-updates|['"`]https?:/;
+    const network = NETWORK_CODE;
     const hits = files.filter((f) => network.test(withoutComments(fs.readFileSync(f, 'utf8')))).map((f) => path.relative(root, f));
     const about = path.join('src', 'ui', 'SettingsModal.tsx');
     expect(hits).toEqual([about]);
     const source = withoutComments(fs.readFileSync(path.join(root, about), 'utf8'));
     expect(source.match(/['"`]https?:[^'"`]*['"`]/g)).toEqual(["'https://github.com/Platteration/multidcheckers'"]);
     expect(source.match(/openURL\([^)]*\)/g)).toEqual(['openURL(SOURCE_URL)']);
-    expect(/\bfetch\(|axios|XMLHttpRequest|WebSocket|openBrowserAsync|expo-updates/.test(source)).toBe(false);
+    expect(NETWORK_PRIMITIVE.test(source)).toBe(false);
+  });
+
+  it('does not depend on a package whose whole job is a socket', () => {
+    // The scan above reads the app's own source, so it only fails once the
+    // call is written. expo-file-system is the case that proves the second
+    // guard is needed: it is already installed (expo pulls it in), its
+    // INTERNET declaration is already accounted for by the manifest walk, and
+    // `FS.downloadAsync(url, path)` is one line. So the call names go in the
+    // scan above, and the modules that exist only to open a socket are kept
+    // out of package.json here, where adding one is a deliberate act.
+    const declared = [...Object.keys(pkg.dependencies), ...Object.keys(pkg.devDependencies)];
+    expect(declared.filter((name) => NETWORK_PACKAGES.includes(name))).toEqual([]);
   });
 
   it('does not ship network access', () => {
