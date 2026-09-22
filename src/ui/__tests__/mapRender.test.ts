@@ -14,9 +14,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { Animated, ScrollView, StyleSheet } from 'react-native';
 import TestRenderer, { ReactTestInstance, ReactTestRenderer, act } from 'react-test-renderer';
-import { BoardRef, GameState, Timeline, newGame, timelineLabel } from '../../engine';
+import { Action, BoardRef, GameState, Timeline, applyAction, index, newGame, timelineLabel } from '../../engine';
 import { ROW, SLOT, MultiverseMap } from '../MultiverseMap';
 
 /** A phone-sized map pane. */
@@ -41,13 +41,13 @@ function multiverse(timelines: number, boardsEach: number): GameState {
   return { ...start, timelines: rows };
 }
 
-const mapElement = (state: GameState, focus: BoardRef) =>
-  React.createElement(MultiverseMap, { state, focus, targets: [], origin: null, onPressBoard: () => {} });
+const mapElement = (state: GameState, focus: BoardRef, reduceMotion = false) =>
+  React.createElement(MultiverseMap, { state, focus, targets: [], origin: null, onPressBoard: () => {}, reduceMotion });
 
-const render = (state: GameState, focus: BoardRef): ReactTestRenderer => {
+const render = (state: GameState, focus: BoardRef, reduceMotion = false): ReactTestRenderer => {
   let tree!: ReactTestRenderer;
   act(() => {
-    tree = TestRenderer.create(mapElement(state, focus));
+    tree = TestRenderer.create(mapElement(state, focus, reduceMotion));
   });
   return tree;
 };
@@ -142,5 +142,50 @@ describe('what the map mounts', () => {
     const tree = render(multiverse(90, 14), focus);
     layout(tree, { width: 0, height: 260 });
     expect(isDrawn(tree, focus)).toBe(true);
+  });
+});
+
+describe('the flight a time travel draws across the map', () => {
+  // Four moves and a travel: the same tiny multiverse the welcome pages use.
+  const move = (from: number, to: number): Action => ({ type: 'move', timeline: 0, move: { from, path: [to], captures: [] } });
+  const travelled = [
+    move(index(2, 1), index(3, 0)),
+    move(index(5, 6), index(4, 7)),
+    move(index(2, 3), index(3, 2)),
+    move(index(5, 4), index(4, 5)),
+    { type: 'travel', from: { timeline: 0, square: index(3, 2) }, to: { timeline: 0, turn: 2 } } as Action,
+  ].reduce((state, action) => applyAction(state, action), newGame());
+
+  /** Animated.timing, stubbed: what is under test is whether it is asked for at all. */
+  let timing: jest.SpyInstance;
+  beforeEach(() => {
+    timing = jest.spyOn(Animated, 'timing').mockImplementation(
+      () => ({ start: () => {}, stop: () => {}, reset: () => {} }) as unknown as Animated.CompositeAnimation,
+    );
+  });
+  afterEach(() => timing.mockRestore());
+
+  it('is the one decorative thing on the map, and it flies when motion is not reduced', () => {
+    // The state has to be one the map draws a flight for at all, or the test
+    // below would pass with the guard deleted.
+    expect(travelled.lastAction?.type).toBe('travel');
+    expect(travelled.lastCreated).toHaveLength(2);
+    const tree = render(travelled, travelled.lastCreated[1]);
+    expect(timing).toHaveBeenCalled();
+    act(() => tree.unmount());
+  });
+
+  it('is skipped when the player, or their device, asked for less motion', () => {
+    // The only thing reduce motion switches off. The scroll still happens, and
+    // still lands on the same board: see focusScroll in map.test.ts.
+    const tree = render(travelled, travelled.lastCreated[1], true);
+    expect(timing).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+  });
+
+  it('starts nothing at all when the last action was not a travel', () => {
+    const tree = render(multiverse(3, 4), { timeline: 0, turn: 0 });
+    expect(timing).not.toHaveBeenCalled();
+    act(() => tree.unmount());
   });
 });

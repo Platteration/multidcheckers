@@ -80,6 +80,29 @@ export function drawnBand(
   return { fromTurn, toTurn: fromTurn + turns, fromTimeline, toTimeline: fromTimeline + rows };
 }
 
+/**
+ * Where the focus effect puts the map, and whether it glides there or jumps.
+ * Pure, so that what reduce motion does to it can be pinned without a platform
+ * to scroll: less motion must still land the same board in the middle of the
+ * same viewport - only `animated` changes. Skipping the scroll instead would
+ * leave a restored or jumped-to board off screen, which is information lost
+ * rather than decoration dropped. Both offsets are in the content's own pixels,
+ * and an unmeasured viewport uses the same phone-sized guess `visibleBand` does.
+ */
+export function focusScroll(
+  focus: BoardRef,
+  viewport: { width: number; height: number },
+  reduceMotion: boolean,
+): { x: number; y: number; animated: boolean } {
+  const width = viewport.width || 360;
+  const height = viewport.height || 240;
+  return {
+    x: Math.max(0, (focus.turn + 1) * SLOT + SLOT / 2 - width / 2),
+    y: Math.max(0, focus.timeline * ROW + ROW / 2 - height / 2),
+    animated: !reduceMotion,
+  };
+}
+
 interface Props {
   state: GameState;
   focus: BoardRef;
@@ -151,12 +174,9 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard, red
   // band does rather than skipping the scroll, which used to leave a restored
   // game focused deep in the multiverse looking at an empty corner of it.
   useEffect(() => {
-    const width = viewport.width || 360;
-    const height = viewport.height || 240;
-    const x = (focus.turn + 1) * SLOT + SLOT / 2 - width / 2;
-    horizontal.current?.scrollTo({ x: Math.max(0, x), animated: !reduceMotion });
-    const y = focus.timeline * ROW + ROW / 2 - height / 2;
-    vertical.current?.scrollTo({ y: Math.max(0, y), animated: !reduceMotion });
+    const { x, y, animated } = focusScroll(focus, viewport, reduceMotion);
+    horizontal.current?.scrollTo({ x, animated });
+    vertical.current?.scrollTo({ y, animated });
   }, [focus.timeline, focus.turn, viewport, state.timelines.length, lastTurn, reduceMotion]);
 
   return (

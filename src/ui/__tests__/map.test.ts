@@ -13,7 +13,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { MINI_HEIGHT, MINI_WIDTH } from '../MiniBoard';
-import { HEADER, ROW, SLOT, drawnBand, visibleBand } from '../MultiverseMap';
+import { HEADER, ROW, SLOT, drawnBand, focusScroll, visibleBand } from '../MultiverseMap';
 
 /** A phone-sized map pane, and a few places the player might have scrolled it to. */
 const VIEWPORT = { width: 380, height: 260 };
@@ -96,5 +96,49 @@ describe('the band when the scroll position cannot be believed', () => {
     expect(band.toTimeline).toBeGreaterThanOrEqual(focus.timeline);
     expect(band.fromTurn).toBeLessThanOrEqual(focus.turn);
     expect(band.toTurn).toBeGreaterThanOrEqual(focus.turn);
+  });
+});
+
+describe('where the focus effect scrolls to', () => {
+  // The offsets are derived here from where the map says it draws a board,
+  // rather than from the function under test: the board for turn t is at
+  // (t + 1) * SLOT, its row at HEADER + timeline * ROW, and the point of the
+  // scroll is to put that board in the middle of the pane.
+  const centred = (focus: { timeline: number; turn: number }) => ({
+    x: Math.max(0, (focus.turn + 1) * SLOT + SLOT / 2 - VIEWPORT.width / 2),
+    y: Math.max(0, focus.timeline * ROW + ROW / 2 - VIEWPORT.height / 2),
+  });
+
+  it('centres the focused board, and never scrolls past the start of the map', () => {
+    for (const focus of [{ timeline: 0, turn: 0 }, { timeline: 3, turn: 2 }, { timeline: 80, turn: 240 }]) {
+      const { x, y } = focusScroll(focus, VIEWPORT, false);
+      expect({ x, y }).toEqual(centred(focus));
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('jumps rather than glides when motion is reduced, and lands in the same place', () => {
+    // The whole of what the setting does to the map's scroll. Deleting the
+    // argument, or hard-coding `animated: true`, is a player who asked for less
+    // motion watching the map glide anyway; hard-coding `false` takes the glide
+    // away from everyone else. What must NOT change is where it ends up: the
+    // focused board is information, and skipping the scroll would hide it.
+    const focus = { timeline: 6, turn: 11 };
+    const glide = focusScroll(focus, VIEWPORT, false);
+    const jump = focusScroll(focus, VIEWPORT, true);
+    expect(glide.animated).toBe(true);
+    expect(jump.animated).toBe(false);
+    expect({ x: jump.x, y: jump.y }).toEqual({ x: glide.x, y: glide.y });
+    expect({ x: jump.x, y: jump.y }).toEqual(centred(focus));
+  });
+
+  it('uses the same phone-sized guess as the band while nothing is measured', () => {
+    // An unmeasured viewport used to skip the scroll, which left a restored
+    // game focused deep in the multiverse looking at an empty corner of it.
+    const focus = { timeline: 80, turn: 9 };
+    const unmeasured = focusScroll(focus, { width: 0, height: 0 }, false);
+    expect(unmeasured).toEqual(focusScroll(focus, { width: 360, height: 240 }, false));
+    expect(unmeasured.x).toBeGreaterThan(0);
   });
 });

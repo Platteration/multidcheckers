@@ -103,6 +103,25 @@ describe('the code the screen offers', () => {
   });
 });
 
+describe('reduce motion', () => {
+  it('reaches the map from the setting, and the map reads it for both of the things it governs', () => {
+    // The setting, the prop and the two behaviours behind it could each be
+    // deleted with the whole suite green. What the map then does with the prop
+    // is pinned where it can be seen running - the flight in mapRender.test.ts,
+    // the scroll's `animated` in map.test.ts - so what is left here is the
+    // wiring those two cannot see: that the screen resolves the setting at all,
+    // hands it to the map, and that the scroll's options come from focusScroll
+    // rather than from a hard-coded `animated: true`.
+    const screen = source('GameScreen.tsx');
+    expect(screen).toMatch(/const reduceMotion = useReduceMotion\(settings\.reduceMotion\);/);
+    expect(screen).toMatch(/<MultiverseMap[^/>]*reduceMotion=\{reduceMotion\}/);
+    const map = source('MultiverseMap.tsx');
+    expect(map).toMatch(/const \{ x, y, animated \} = focusScroll\(focus, viewport, reduceMotion\);/);
+    expect(map).toMatch(/horizontal\.current\?\.scrollTo\(\{ x, animated \}\);/);
+    expect(map).toMatch(/vertical\.current\?\.scrollTo\(\{ y, animated \}\);/);
+  });
+});
+
 describe('a saved game that could not be read', () => {
   it('is kept, and said out loud, not replaced in silence', () => {
     // App.tsx tells a record it could not read from no record at all, and the
