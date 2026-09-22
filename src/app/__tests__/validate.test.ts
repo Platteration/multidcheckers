@@ -18,6 +18,7 @@ import { DEFAULT_SETTINGS, Settings } from '../settings';
 import { EMPTY_STATS, Stats } from '../stats';
 import {
   MAX_SOLVED,
+  MAX_SOLVED_SCANNED,
   PIECE_SET_IDS,
   REDUCE_MOTION,
   SKIN_IDS,
@@ -154,9 +155,26 @@ describe('cleanProgress', () => {
     expect(cleanProgress(null, EMPTY_PROGRESS)).toEqual(EMPTY_PROGRESS);
   });
 
-  it('bounds a list the app never wrote', () => {
+  it('bounds a list the app never wrote, and bounds it before walking it', () => {
     const solved = Array.from({ length: MAX_SOLVED + 5 }, (_, i) => `p${i}`);
     expect(cleanProgress({ solved }, EMPTY_PROGRESS).solved).toHaveLength(MAX_SOLVED);
+
+    // A cap that runs after the work is not a cap on the work. Counted rather
+    // than timed, because a stopwatch says nothing about why it was slow: the
+    // list below is fifty times the scan ceiling and every entry is the same
+    // id, so nothing is kept after the first and the only thing that can stop
+    // the walk is the ceiling on what is read. The previous filter / Set /
+    // spread read all of it (measured: 880 ms for two million ids, on every
+    // launch) and then kept one.
+    let reads = 0;
+    const planted = new Proxy(new Array(MAX_SOLVED_SCANNED * 50).fill('sweep'), {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && /^[0-9]+$/.test(key)) reads++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    expect(cleanProgress({ solved: planted }, EMPTY_PROGRESS)).toEqual({ solved: ['sweep'] });
+    expect(reads).toBeLessThanOrEqual(MAX_SOLVED_SCANNED);
   });
 });
 
