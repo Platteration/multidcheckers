@@ -3,8 +3,8 @@
  *
  * `android.blockedPermissions` in app.json takes INTERNET back out of the
  * merged manifest, because nothing in `src/` opens a socket and the app's
- * whole privacy story is that a portrait it copied cannot leave the device.
- * expo-file-system declares INTERNET in its own module manifest, so blocking
+ * whole privacy story is that what it keeps cannot leave the device.
+ * A dependency can declare INTERNET in its own module manifest, so blocking
  * it is the only way the shipped APK does not carry it.
  *
  * A development build does need it: that is how Metro's bundle reaches the

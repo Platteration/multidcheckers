@@ -21,7 +21,8 @@ socket), so `android.blockedPermissions` takes INTERNET, the legacy storage pair
 media-read set and the template's SYSTEM_ALERT_WINDOW back out of the shipped build;
 `plugins/withDebugInternet.js` adds INTERNET to
 `android/app/src/debug/AndroidManifest.xml` alone at prebuild so a dev client can still
-fetch its bundle. `allowBackup` is an explicit `true`: the store is the player's own six
+fetch its bundle; it is drawdraw's file, verbatim but for the one sentence that described
+drawdraw's own subject matter. `allowBackup` is an explicit `true`: the store is the player's own six
 records and nothing else — the settings, the game in progress, the record, puzzle progress,
 the entitlements and the save that could not be read (`KEYS` in `src/app/persist.ts`) —
 so a restore brings back a half-played game rather than anything worth protecting. The
@@ -55,13 +56,26 @@ holds `haptics`, `sound`, `patterns`, `theme` (`system|dark|light`; a null platf
 resolves to dark), `reduceMotion` (`system|on|off`, resolved by `useReduceMotion` in
 `src/motion.ts`: a rejected native query or a web page without `matchMedia` means no
 preference), `skin`, `pieces`, `variants` (one boolean per rule the engine knows) and
-`welcomed`, the onboarding flag. Reset to defaults is confirmed through `ConfirmModal`,
-rewrites the settings record alone and keeps `welcomed`. The About card's version is
+`welcomed`, the onboarding flag. Reset to defaults is confirmed before it spends anything,
+rewrites the settings record alone and keeps `welcomed`; the question is asked *inside* the
+settings `<Modal>` (a `ConfirmPanel` swapped in for the sheet, the way `MenuModal` asks its
+own), because on iOS a view controller already presenting a modal refuses to present a
+second one and the sibling `<ConfirmModal>` that used to ask it simply never appeared —
+Reset did nothing at all on that platform. The error boundary follows chesscheatser's
+rule for the same shape of question: `Try again` first and free, `Start a new game` behind
+a confirmation, and it is mounted above the providers as well as below them. The About card's version is
 `Constants.expoConfig.version` from `expo-constants`, which is app.json's, and its source
 link is the one URL in the tree: `Linking` hands it to the browser, so INTERNET stays
 blocked, and `appConfig.test.ts` pins that URL by file and value so the no-network scan
-stays a guard. The keys, the row list and every enum table are pinned as literals in
-`src/app/__tests__/settings-contract.test.ts`; `validate.test.ts` walks
+stays a guard. That scan names the socket primitives (`fetch(`, `XMLHttpRequest`,
+`WebSocket`, `EventSource`, `sendBeacon`, `new Request(`), the transfer calls of a module
+that is already installed (expo-file-system's `downloadAsync`/`uploadAsync`) and the module
+specifiers that exist only to open a socket, and a second test keeps those packages out of
+`package.json`; what it cannot see is a call assembled at runtime
+(`globalThis['fet'+'ch']`), which is what the INTERNET block itself is for. The keys, the
+record's fields and every enum table are pinned as literals in
+`src/app/__tests__/settings-contract.test.ts`, and the sheet's own rows, its Reset
+confirmation and the one-Modal rule in `src/ui/__tests__/settingsSheet.test.ts`; `validate.test.ts` walks
 `Object.getOwnPropertyNames(Object.prototype)` through every table via `JSON.parse` and
 must fail if `has` is ever changed to `in`.
 

@@ -70,8 +70,9 @@ opponent must defend, or pull a doomed piece out of the present.
   and the app's own scheme on a device.
 - **Fits the screen.** On a device the app is locked to portrait
   (`orientation` in `app.json`), so the board stacks over the map; the
-  side-by-side layout the screen keeps for a window wider than it is tall is
-  what the web build shows in a wide browser window. The map draws a line
+  side-by-side layout the screen keeps for a window half again wider than it
+  is tall (`width > height * 1.15` in GameScreen, so a nearly square window
+  still stacks) is what the web build shows in a wide browser window. The map draws a line
   from each branch to the board it split off, and a time travel flies a token
   across it.
 - **Saved automatically.** The game in progress, settings, record, and
