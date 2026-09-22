@@ -47,27 +47,34 @@ export default function App() {
   // Bumping the key remounts everything below it, which is how the error
   // boundary's "start a new game" gets a clean tree after clearing the save.
   const [generation, setGeneration] = useState(0);
+  // The removal is awaited before the remount: the fresh tree reads the game
+  // key as its first act, and a removal still in flight would be a game the
+  // player asked to be rid of coming straight back.
+  const startOver = () => {
+    void removeKey(KEYS.game).finally(() => setGeneration((g) => g + 1));
+  };
+  // Two boundaries, because one below the providers cannot catch a provider.
+  // The outer one is the difference between the fallback and a blank screen if
+  // a stored record ever throws on its way through a provider; the inner one
+  // keeps the providers mounted - and with them the theme and the settings -
+  // for everything that throws under them, which is almost everything.
   return (
-    <SettingsProvider>
-      <ThemeProvider>
-        <ProgressProvider>
-          <EntitlementsProvider>
-            <StatsProvider>
-              <SafeAreaProvider>
-                <ErrorBoundary
-                  key={generation}
-                  onReset={() => {
-                    void removeKey(KEYS.game);
-                    setGeneration((g) => g + 1);
-                  }}
-                >
-                  <Root />
-                </ErrorBoundary>
-              </SafeAreaProvider>
-            </StatsProvider>
-          </EntitlementsProvider>
-        </ProgressProvider>
-      </ThemeProvider>
-    </SettingsProvider>
+    <ErrorBoundary key={`shell-${generation}`} onReset={startOver}>
+      <SettingsProvider>
+        <ThemeProvider>
+          <ProgressProvider>
+            <EntitlementsProvider>
+              <StatsProvider>
+                <SafeAreaProvider>
+                  <ErrorBoundary key={generation} onReset={startOver}>
+                    <Root />
+                  </ErrorBoundary>
+                </SafeAreaProvider>
+              </StatsProvider>
+            </EntitlementsProvider>
+          </ProgressProvider>
+        </ThemeProvider>
+      </SettingsProvider>
+    </ErrorBoundary>
   );
 }
