@@ -14,7 +14,6 @@ import {
   getTimeline,
   isPending,
   latestRef,
-  latestRefIn,
   mandatoryTimelines,
   optionalTimelines,
   moveTarget,
@@ -52,6 +51,7 @@ import { MultiverseMap } from './MultiverseMap';
 import { Section, SettingsModal, SwitchRow } from './SettingsModal';
 import { Theme, headerTextStyles, radius, spacing } from './theme';
 import { useTheme } from '../app/theme';
+import { linkNeedsConfirming, travelOrigin } from './guards';
 import { useGame } from './useGame';
 
 interface Props {
@@ -127,7 +127,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
   const acceptCodeRef = useRef(acceptCode);
   acceptCodeRef.current = acceptCode;
   const hasGameToLoseRef = useRef(false);
-  hasGameToLoseRef.current = game.history.length > 1;
+  hasGameToLoseRef.current = linkNeedsConfirming(game.history.length);
   const arriveCode = (code: string) => {
     if (hasGameToLoseRef.current) setLinkCode(code);
     else acceptCodeRef.current(code);
@@ -307,7 +307,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
 
   // The selection belongs to the live game; a replayed state may not have that
   // timeline yet, so nothing about it is read while replaying.
-  const origin = replaying || selection.kind === 'none' ? null : latestRefIn(state, selection.from.timeline);
+  const origin = travelOrigin(state, selection, replaying);
   const holdingHere =
     !replaying && selection.kind === 'piece' && selection.from.timeline === focus.timeline && focusIsPending;
   const destinations: Destination[] = holdingHere

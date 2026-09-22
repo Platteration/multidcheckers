@@ -191,7 +191,17 @@ function savedActions(v: AnySaved): Action[] | null {
   if (v.version === 3) return Array.isArray(v.actions) ? v.actions : null;
   const states = v.history as (Partial<GameState> | null)[] | undefined;
   if (!Array.isArray(states) || states.length === 0) return null;
-  return states.slice(1).map((s) => s?.lastAction).filter((a): a is Action => !!a);
+  // Every state after the first records the action that made it. One without
+  // is a record this build cannot replay faithfully: skipping the gap and
+  // replaying the rest would rebuild a different game, or - when the actions
+  // around it happen to stay legal - a game the player never played. Refused,
+  // the record is kept on the device (`restoreSaved`) rather than replaced.
+  const actions: Action[] = [];
+  for (const state of states.slice(1)) {
+    if (!state?.lastAction) return null;
+    actions.push(state.lastAction);
+  }
+  return actions;
 }
 
 /**

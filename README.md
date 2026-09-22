@@ -131,7 +131,9 @@ src/engine/board.ts        one checkers board: moves, jump chains, kings
 src/engine/multiverse.ts   timelines, pending boards, time travel, rules, win/draw
 src/engine/bot.ts          the three-level computer opponent
 src/engine/__tests__/      unit tests for the rules, bots, puzzles, game codes,
-                           the autosave, links and the app config
+                           the autosave and links
+src/app/__tests__/         the app config, the settings contract, the validator
+                           and the game read back out of storage
 src/puzzles/index.ts       the puzzle set (each verified by a test)
 src/app/settings.tsx       persisted settings (theme, motion, skin, sound, variants)
 src/motion.ts              the reduce-motion hook (device preference or override)
@@ -143,14 +145,16 @@ src/app/setup.ts           how a game is set up, and the autosave format
 src/app/purchases.ts       the store seam; app/entitlements.tsx gates premium looks
 src/app/feedback.ts        haptics and sounds (app/sound.ts)
 src/ui/useGame.ts          game controller hook: history/undo, selection, bot turns
+src/ui/guards.ts           the screen's pure guards: travel origin, link confirmation, square labels
 src/ui/GameScreen.tsx      screen layout, status text, bot loop, replay
 src/ui/CheckerBoard.tsx    the big tappable board with the landing animation
 src/ui/MiniBoard.tsx       board thumbnails for the map
 src/ui/MultiverseMap.tsx   the timeline map (rows = timelines, columns = turns)
 src/ui/*Modal.tsx          menu, rules, settings, new game, puzzles, share, extras
 src/ui/ErrorBoundary.tsx   the fallback for a render that throws; its button clears the saved game
-src/ui/__tests__/          contrast checks on the header text, which is drawn
-                           straight on the background
+src/ui/__tests__/          contrast checks on the header text (drawn straight on
+                           the background), the map's windowing, the error
+                           boundary, the board, the share sheet and the guards
 ```
 
 The engine is pure TypeScript with no React dependency, so the rules can be
