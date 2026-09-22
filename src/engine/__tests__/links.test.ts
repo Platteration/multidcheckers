@@ -53,14 +53,24 @@ const ORIGINS = [
 const PATHS = ['', '/', '/game/', '/load/5DCK.abc', '/load/5DCK.abc/', '/load/5DCK.abc/x', '/a/load/5DCK.p/b', '/load/5DCK.a/load/5DCK.b'];
 const QUERIES = ['', '?x=1', '?code=5DCK.q', '?x=1&code=5DCK.q'];
 const HASHES = ['', '#x', '#code=5DCK.h', '#/load/5DCK.h'];
-const SHAPES: string[] = [];
+/** Each shape with the scheme and host it arrived under: the cleaner answers with a path. */
+const SHAPES: { origin: string; href: string }[] = [];
 for (const origin of ORIGINS) {
   for (const path of PATHS) {
     for (const query of QUERIES) {
-      for (const hash of HASHES) SHAPES.push(origin + path + query + hash);
+      for (const hash of HASHES) SHAPES.push({ origin, href: origin + path + query + hash });
     }
   }
 }
+
+/**
+ * The cleaned address as the browser will hold it. `urlWithoutCode` answers
+ * with a path, `history.replaceState` resolves that against the address it is
+ * already showing, and `new URL` throws on a relative path - so re-reading the
+ * bare answer found "no code" whatever the cleaner had actually left behind.
+ * That is what made the property below pass while proving nothing.
+ */
+const backInTheAddressBar = (origin: string, cleaned: string): string => new URL(cleaned, origin).href;
 
 describe('urlWithoutCode', () => {
   it('leaves nothing a reload could import again, in any shape of link', () => {
@@ -69,7 +79,7 @@ describe('urlWithoutCode', () => {
     // urlWithoutCode has to be able to take back out of it.
     expect(SHAPES.length).toBeGreaterThan(500);
     let read = 0;
-    for (const href of SHAPES) {
+    for (const { origin, href } of SHAPES) {
       if (codeFromUrl(href) === null) continue;
       read++;
       const next = urlWithoutCode(href);
@@ -78,7 +88,9 @@ describe('urlWithoutCode', () => {
       // the address with it resolves back to the address the code is in.
       expect(next).not.toBeNull();
       expect(next).not.toBe('');
-      expect(codeFromUrl(next)).toBeNull();
+      // Read back through the scheme and host it will really sit under, which
+      // is the whole point: this is the address the next reload starts from.
+      expect(codeFromUrl(backInTheAddressBar(origin, next!))).toBeNull();
     }
     // Most of them do carry a code; a property nothing satisfies proves nothing.
     expect(read).toBeGreaterThan(SHAPES.length / 2);
