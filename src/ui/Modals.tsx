@@ -143,8 +143,7 @@ export function GameOverModal({ state, visible, onRestart, onDismiss, onReplay }
   );
 }
 
-interface ConfirmProps {
-  visible: boolean;
+interface ConfirmContent {
   title: string;
   body: string;
   confirmLabel: string;
@@ -153,21 +152,41 @@ interface ConfirmProps {
   onCancel: () => void;
 }
 
-/** Ask before doing something that throws the game in progress away. */
-export function ConfirmModal({ visible, title, body, confirmLabel, cancelLabel, onConfirm, onCancel }: ConfirmProps) {
+interface ConfirmProps extends ConfirmContent {
+  visible: boolean;
+}
+
+/**
+ * The question itself, with no Modal of its own, so that a screen already
+ * inside one can ask it without opening a second. React Native presents an iOS
+ * Modal from the nearest view controller, and a controller that is already
+ * presenting one refuses the next — the button then does nothing at all, on
+ * that platform only. See `SettingsModal`, which swaps this in for its sheet
+ * the way `MenuModal` swaps in its own.
+ */
+export function ConfirmPanel({ title, body, confirmLabel, cancelLabel, onConfirm, onCancel }: ConfirmContent) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
+    <View style={styles.sheet}>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.ruleBody}>{body}</Text>
+      <View style={{ height: spacing.lg }} />
+      <Button label={confirmLabel} tone="danger" onPress={onConfirm} />
+      <View style={{ height: spacing.sm }} />
+      <Button label={cancelLabel} tone="primary" onPress={onCancel} />
+    </View>
+  );
+}
+
+/** Ask before doing something that throws the game in progress away. */
+export function ConfirmModal({ visible, ...content }: ConfirmProps) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={content.onCancel}>
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.ruleBody}>{body}</Text>
-          <View style={{ height: spacing.lg }} />
-          <Button label={confirmLabel} tone="danger" onPress={onConfirm} />
-          <View style={{ height: spacing.sm }} />
-          <Button label={cancelLabel} tone="primary" onPress={onCancel} />
-        </View>
+        <ConfirmPanel {...content} />
       </View>
     </Modal>
   );

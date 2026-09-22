@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useEntitlements } from '../app/entitlements';
 import { ReduceMotionChoice, ThemeChoice, useSettings } from '../app/settings';
-import { Button, ConfirmModal } from './Modals';
+import { Button, ConfirmPanel } from './Modals';
 import { PIECE_SETS, SKINS, Theme, radius, spacing } from './theme';
 import { useTheme } from '../app/theme';
 
@@ -26,10 +26,30 @@ export function SettingsModal({ visible, onClose, children }: Props) {
   const { owns } = useEntitlements();
   const [locked, setLocked] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  // The question is asked inside this Modal, never as a second one beside it:
+  // on iOS the view controller already presenting this sheet refuses to present
+  // another, so a sibling <Modal> for the confirmation is a Reset button that
+  // does nothing there. MenuModal asks its own question the same way.
+  const close = () => {
+    setConfirmReset(false);
+    onClose();
+  };
   return (
-    <>
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-        <View style={styles.backdrop}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={confirmReset ? () => setConfirmReset(false) : close}>
+      <View style={styles.backdrop}>
+        {confirmReset ? (
+          <ConfirmPanel
+            title="Reset settings?"
+            body="Every setting on this sheet goes back to its default: feel, theme, motion, board, pieces and the rule variants. Your games, record, puzzle progress and purchases are not touched."
+            confirmLabel="Reset"
+            cancelLabel="Keep my settings"
+            onConfirm={() => {
+              setConfirmReset(false);
+              reset();
+            }}
+            onCancel={() => setConfirmReset(false)}
+          />
+        ) : (
           <View style={styles.sheet}>
             <Text style={styles.title}>Settings</Text>
             <ScrollView style={{ maxHeight: 460 }}>
@@ -111,23 +131,11 @@ export function SettingsModal({ visible, onClose, children }: Props) {
               </Section>
             </ScrollView>
             <View style={{ height: spacing.md }} />
-            <Button label="Done" tone="primary" onPress={onClose} />
+            <Button label="Done" tone="primary" onPress={close} />
           </View>
-        </View>
-      </Modal>
-      <ConfirmModal
-        visible={confirmReset}
-        title="Reset settings?"
-        body="Every setting on this sheet goes back to its default: feel, theme, motion, board, pieces and the rule variants. Your games, record, puzzle progress and purchases are not touched."
-        confirmLabel="Reset"
-        cancelLabel="Keep my settings"
-        onConfirm={() => {
-          setConfirmReset(false);
-          reset();
-        }}
-        onCancel={() => setConfirmReset(false)}
-      />
-    </>
+        )}
+      </View>
+    </Modal>
   );
 }
 
