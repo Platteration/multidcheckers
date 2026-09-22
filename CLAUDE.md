@@ -28,6 +28,32 @@ adds tomorrow that declares a permission fails it until the permission is either
 blocked. `tsconfig.json` lists `node` in `types` for that test; `@types/node` is a
 declared devDependency for the same reason, pinned to the Node major CI runs (^22).
 
+## Settings
+
+Every stored record has one key, named in `KEYS` in `src/app/persist.ts`:
+`multidcheckers.{settings,game,stats,progress,entitlements}.v1`. The bare keys earlier
+builds wrote (`settings.v1` and the rest) migrate on first launch — new key wins when
+both are present, bytes are copied verbatim, the old key is deleted only after the write
+succeeded and never on the web, where AsyncStorage is localStorage keyed by an origin
+the sibling game shares — and `loadJson` awaits the migration, so no provider can read
+ahead of it. Every read goes through `src/app/validate.ts` (`cleanSettings`,
+`cleanVariants`, `cleanStats`, `cleanProgress`, `cleanEntitlements`): tables typed
+`Record<Union, true>`, own-property lookups only, a per-field fallback from the defaults
+passed in, and no React Native import so a plain test can load it. The settings record
+holds `haptics`, `sound`, `patterns`, `theme` (`system|dark|light`; a null platform scheme
+resolves to dark), `reduceMotion` (`system|on|off`, resolved by `useReduceMotion` in
+`src/motion.ts`: a rejected native query or a web page without `matchMedia` means no
+preference), `skin`, `pieces`, `variants` (one boolean per rule the engine knows) and
+`welcomed`, the onboarding flag. Reset to defaults is confirmed through `ConfirmModal`,
+rewrites the settings record alone and keeps `welcomed`. The About card's version is
+`Constants.expoConfig.version` from `expo-constants`, which is app.json's, and its source
+link is the one URL in the tree: `Linking` hands it to the browser, so INTERNET stays
+blocked, and `appConfig.test.ts` pins that URL by file and value so the no-network scan
+stays a guard. The keys, the row list and every enum table are pinned as literals in
+`src/app/__tests__/settings-contract.test.ts`; `validate.test.ts` walks
+`Object.getOwnPropertyNames(Object.prototype)` through every table via `JSON.parse` and
+must fail if `has` is ever changed to `in`.
+
 ## Conventions
 
 This repository follows `CONVENTIONS.md`, which is identical in every platteration

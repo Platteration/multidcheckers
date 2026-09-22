@@ -88,6 +88,8 @@ interface Props {
   /** The board the held disc comes from, if any. */
   origin: BoardRef | null;
   onPressBoard: (ref: BoardRef) => void;
+  /** Skip the decorative flight and jump the scroll: the player, or their device, asked for less motion. */
+  reduceMotion?: boolean;
 }
 
 /**
@@ -95,7 +97,7 @@ interface Props {
  * each timeline is a row, starting at the turn where it branched off.
  * `targets` are the boards the currently held piece may travel to.
  */
-export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: Props) {
+export function MultiverseMap({ state, focus, targets, origin, onPressBoard, reduceMotion = false }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const lastTurn = maxTurn(state);
@@ -125,7 +127,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
   const travel = state.lastAction?.type === 'travel' && state.lastCreated.length === 2 ? state.lastAction : null;
   const flightKey = travel ? `${state.timelines.length}-${state.lastCreated[1].timeline}-${state.lastCreated[1].turn}` : null;
   useEffect(() => {
-    if (!travel) return;
+    if (!travel || reduceMotion) return;
     const from = travel.from.timeline;
     const fromTurn = state.lastCreated[0].turn - 1;
     const to = state.lastCreated[1];
@@ -152,10 +154,10 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
     const width = viewport.width || 360;
     const height = viewport.height || 240;
     const x = (focus.turn + 1) * SLOT + SLOT / 2 - width / 2;
-    horizontal.current?.scrollTo({ x: Math.max(0, x), animated: true });
+    horizontal.current?.scrollTo({ x: Math.max(0, x), animated: !reduceMotion });
     const y = focus.timeline * ROW + ROW / 2 - height / 2;
-    vertical.current?.scrollTo({ y: Math.max(0, y), animated: true });
-  }, [focus.timeline, focus.turn, viewport, state.timelines.length, lastTurn]);
+    vertical.current?.scrollTo({ y: Math.max(0, y), animated: !reduceMotion });
+  }, [focus.timeline, focus.turn, viewport, state.timelines.length, lastTurn, reduceMotion]);
 
   return (
     <ScrollView

@@ -19,6 +19,7 @@ import { EMPTY_STATS, Stats } from '../stats';
 import {
   MAX_SOLVED,
   PIECE_SET_IDS,
+  REDUCE_MOTION,
   SKIN_IDS,
   THEMES,
   cleanEntitlements,
@@ -63,12 +64,13 @@ const D = DEFAULT_SETTINGS;
 
 /** Every theme, spelled out: dropping one from the table must fail here, not silently shrink the loop. */
 const ALL_THEMES: Settings['theme'][] = ['system', 'dark', 'light'];
+const ALL_MOTION: Settings['reduceMotion'][] = ['system', 'on', 'off'];
 
 describe('cleanSettings', () => {
-  it('refuses every name on Object.prototype as a theme, skin, piece set or variant', () => {
+  it('refuses every name on Object.prototype as a theme, motion, skin, piece set or variant', () => {
     expect(PROTOTYPE_NAMES).toContain('constructor');
     for (const name of PROTOTYPE_NAMES) {
-      expect(cleanSettings({ theme: name, skin: name, pieces: name }, D)).toEqual(D);
+      expect(cleanSettings({ theme: name, reduceMotion: name, skin: name, pieces: name }, D)).toEqual(D);
       expect(cleanSettings(parsed(`{"variants":{"${name}":true}}`), D).variants).toEqual(D.variants);
       expect(cleanVariants(parsed(`{"${name}":true}`))).toEqual({ ...DEFAULT_RULES });
     }
@@ -79,9 +81,11 @@ describe('cleanSettings', () => {
     expect(cleanSettings(parsed(JSON.stringify(D)), D)).toEqual(D);
   });
 
-  it('keeps every theme, every skin, every piece set and every variant', () => {
+  it('keeps every theme, every motion choice, every skin, every piece set and every variant', () => {
     for (const theme of ALL_THEMES) expect(cleanSettings({ theme }, D).theme).toBe(theme);
     expect(Object.keys(THEMES)).toEqual(ALL_THEMES);
+    for (const reduceMotion of ALL_MOTION) expect(cleanSettings({ reduceMotion }, D).reduceMotion).toBe(reduceMotion);
+    expect(Object.keys(REDUCE_MOTION)).toEqual(ALL_MOTION);
     for (const { id } of SKINS) expect(cleanSettings({ skin: id }, D).skin).toBe(id);
     for (const { id } of PIECE_SETS) expect(cleanSettings({ pieces: id }, D).pieces).toBe(id);
     for (const name of Object.keys(DEFAULT_RULES)) {
@@ -93,7 +97,7 @@ describe('cleanSettings', () => {
   });
 
   it('falls back one field at a time, never the whole record', () => {
-    const s = cleanSettings({ theme: 'neon', skin: 'marble', pieces: 7, haptics: 'yes', sound: false, welcomed: true }, D);
+    const s = cleanSettings({ theme: 'neon', reduceMotion: true, skin: 'marble', pieces: 7, haptics: 'yes', sound: false, welcomed: true }, D);
     expect(s).toEqual({ ...D, skin: 'marble', sound: false, welcomed: true });
   });
 

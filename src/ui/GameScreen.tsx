@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Action,
@@ -28,6 +28,7 @@ import { useEntitlements } from '../app/entitlements';
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { KEYS, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
+import { useReduceMotion } from '../motion';
 import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
 import { narrate, variantsLabel } from '../app/narrate';
 import { useStats } from '../app/stats';
@@ -48,7 +49,7 @@ import { MiniBoard } from './MiniBoard';
 import { ShareModal } from './ShareModal';
 import { Button, ConfirmModal, GameOverModal, RulesModal } from './Modals';
 import { MultiverseMap } from './MultiverseMap';
-import { Row, Section, SettingsModal } from './SettingsModal';
+import { Section, SettingsModal, SwitchRow } from './SettingsModal';
 import { Theme, headerTextStyles, radius, spacing } from './theme';
 import { useTheme } from '../app/theme';
 import { useGame } from './useGame';
@@ -69,6 +70,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, setVariant, update: updateSettings } = useSettings();
+  const reduceMotion = useReduceMotion(settings.reduceMotion);
   const { recordGame } = useStats();
   const { entitlements } = useEntitlements();
   const [statsOpen, setStatsOpen] = useState(false);
@@ -465,7 +467,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
         </Text>
       </View>
       <View style={styles.map}>
-        <MultiverseMap state={state} focus={focus} targets={targets} origin={origin} onPressBoard={game.focusBoard} />
+        <MultiverseMap state={state} focus={focus} targets={targets} origin={origin} onPressBoard={game.focusBoard} reduceMotion={reduceMotion} />
       </View>
 
       </View>
@@ -530,15 +532,24 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
       />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)}>
         <Section title="Variants (apply to new games)">
-          <Row label="Flying kings" hint="Kings slide any distance and land anywhere beyond a capture.">
-            <Switch value={!!settings.variants.flyingKings} onValueChange={(v) => setVariant('flyingKings', v)} />
-          </Row>
-          <Row label="Backward captures" hint="Men may jump backwards as well as forwards.">
-            <Switch value={!!settings.variants.backCapture} onValueChange={(v) => setVariant('backCapture', v)} />
-          </Row>
-          <Row label="Strict present (5D rules)" hint="Only boards at the present must be played; boards ahead are optional and you end your turn yourself.">
-            <Switch value={!!settings.variants.strictPresent} onValueChange={(v) => setVariant('strictPresent', v)} />
-          </Row>
+          <SwitchRow
+            label="Flying kings"
+            hint="Kings slide any distance and land anywhere beyond a capture."
+            value={!!settings.variants.flyingKings}
+            onValueChange={(v) => setVariant('flyingKings', v)}
+          />
+          <SwitchRow
+            label="Backward captures"
+            hint="Men may jump backwards as well as forwards."
+            value={!!settings.variants.backCapture}
+            onValueChange={(v) => setVariant('backCapture', v)}
+          />
+          <SwitchRow
+            label="Strict present (5D rules)"
+            hint="Only boards at the present must be played; boards ahead are optional and you end your turn yourself."
+            value={!!settings.variants.strictPresent}
+            onValueChange={(v) => setVariant('strictPresent', v)}
+          />
         </Section>
       </SettingsModal>
       <RulesModal visible={rulesOpen} onClose={() => setRulesOpen(false)} />

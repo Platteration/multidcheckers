@@ -1,5 +1,5 @@
 /**
- * The corner of react-test-renderer the map's render test uses. The package
+ * The corner of react-test-renderer the render tests use. The package
  * ships no types, and this repository keeps its dependencies to what Expo
  * brings, so the surface it touches is declared here rather than pulled in.
  */
@@ -11,6 +11,7 @@ declare module 'react-test-renderer' {
     props: { [key: string]: unknown };
     findAll(predicate: (node: ReactTestInstance) => boolean, options?: { deep?: boolean }): ReactTestInstance[];
     findAllByType(type: unknown): ReactTestInstance[];
+    findByType(type: unknown): ReactTestInstance;
   }
 
   export interface ReactTestRenderer {
@@ -20,6 +21,7 @@ declare module 'react-test-renderer' {
   }
 
   export function create(element: ReactElement): ReactTestRenderer;
+  export function act(callback: () => Promise<void>): Promise<void>;
   export function act(callback: () => void): void;
 
   const TestRenderer: { create: typeof create; act: typeof act };

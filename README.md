@@ -57,7 +57,9 @@ opponent must defend, or pull a doomed piece out of the present.
   as a code brings its own rules, so it cannot change them on you quietly.
   Forty quiet moves each with no capture, crowning or travel is a draw.
 - **Themes and looks.** System, dark or light theme; five board skins; four
-  piece sets that also rename the sides; colour-blind markings on pieces.
+  piece sets that also rename the sides; colour-blind markings on pieces; a
+  reduce-motion setting that follows the device or overrides it. Settings can
+  be reset to their defaults without touching games, record or progress.
 - **Feel.** Haptics and short synthesized sounds, both switchable. Pieces
   pop into place when they land.
 - **Your record.** Games played, wins against each bot, time travels made,
@@ -127,7 +129,8 @@ src/engine/bot.ts          the three-level computer opponent
 src/engine/__tests__/      unit tests for the rules, bots, puzzles, game codes,
                            the autosave, links and the app config
 src/puzzles/index.ts       the puzzle set (each verified by a test)
-src/app/settings.tsx       persisted settings (theme, skin, sound, variants)
+src/app/settings.tsx       persisted settings (theme, motion, skin, sound, variants)
+src/motion.ts              the reduce-motion hook (device preference or override)
 src/app/theme.tsx          resolves settings into the palette screens draw with
 src/app/persist.ts         every storage key, the key migration, AsyncStorage helpers
 src/app/validate.ts        what a stored record may contain; every read goes through it

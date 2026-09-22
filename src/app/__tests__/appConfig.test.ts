@@ -253,16 +253,21 @@ describe('what leaves the device', () => {
     // comment is not one either, so comments are stripped first. If this
     // fails, the app has grown a network path and the block below is wrong,
     // not the code.
+    //
+    // The one URL the app carries is the About card's source link, which
+    // Linking hands to the browser: no socket of the app's own. It is pinned
+    // by file and by value, so a second URL, or that one anywhere else, or
+    // anything but openURL reaching it, is still a finding.
     const files = appSources();
     expect(files.length).toBeGreaterThan(10);
-    const hits = files
-      .filter((f) =>
-        /\bfetch\(|axios|XMLHttpRequest|WebSocket|openURL|openBrowserAsync|expo-updates|['"`]https?:/.test(
-          withoutComments(fs.readFileSync(f, 'utf8'))
-        )
-      )
-      .map((f) => path.relative(root, f));
-    expect(hits).toEqual([]);
+    const network = /\bfetch\(|axios|XMLHttpRequest|WebSocket|openURL|openBrowserAsync|expo-updates|['"`]https?:/;
+    const hits = files.filter((f) => network.test(withoutComments(fs.readFileSync(f, 'utf8')))).map((f) => path.relative(root, f));
+    const about = path.join('src', 'ui', 'SettingsModal.tsx');
+    expect(hits).toEqual([about]);
+    const source = withoutComments(fs.readFileSync(path.join(root, about), 'utf8'));
+    expect(source.match(/['"`]https?:[^'"`]*['"`]/g)).toEqual(["'https://github.com/Platteration/multidcheckers'"]);
+    expect(source.match(/openURL\([^)]*\)/g)).toEqual(['openURL(SOURCE_URL)']);
+    expect(/\bfetch\(|axios|XMLHttpRequest|WebSocket|openBrowserAsync|expo-updates/.test(source)).toBe(false);
   });
 
   it('does not ship network access', () => {

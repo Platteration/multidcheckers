@@ -22,10 +22,11 @@ import { DEFAULT_RULES, type Rules } from '../engine';
 import { PIECE_SETS, SKINS } from '../ui/theme';
 import type { Entitlements } from './purchases';
 import type { Progress } from './progress';
-import type { Settings, ThemeChoice } from './settings';
+import type { ReduceMotionChoice, Settings, ThemeChoice } from './settings';
 import type { Record_, Stats } from './stats';
 
 export const THEMES: Record<ThemeChoice, true> = { system: true, dark: true, light: true };
+export const REDUCE_MOTION: Record<ReduceMotionChoice, true> = { system: true, on: true, off: true };
 
 /** Board skin and piece set ids, as the cosmetics tables declare them. */
 const idTable = (items: readonly { id: string }[]): Record<string, true> =>
@@ -91,6 +92,7 @@ export function cleanSettings(raw: unknown, fallback: Settings): Settings {
     sound: bool(s.sound, fallback.sound),
     patterns: bool(s.patterns, fallback.patterns),
     theme: pick(s.theme, THEMES, fallback.theme),
+    reduceMotion: pick(s.reduceMotion, REDUCE_MOTION, fallback.reduceMotion),
     skin: pick(s.skin, SKIN_IDS, fallback.skin),
     pieces: pick(s.pieces, PIECE_SET_IDS, fallback.pieces),
     variants: cleanVariants(s.variants),

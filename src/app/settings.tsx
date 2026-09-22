@@ -4,6 +4,8 @@ import { KEYS, loadJson, saveJson } from './persist';
 import { cleanSettings } from './validate';
 
 export type ThemeChoice = 'system' | 'dark' | 'light';
+/** Decorative motion: the platform's own preference, or the player's answer either way. */
+export type ReduceMotionChoice = 'system' | 'on' | 'off';
 
 export interface Settings {
   /** Vibrate on drops, captures, spins, and wins. */
@@ -13,6 +15,8 @@ export interface Settings {
   /** Mark pieces with shapes as well as colour, for colour-blind players. */
   patterns: boolean;
   theme: ThemeChoice;
+  /** Skip the flight across the map when a piece travels; `system` follows the device. */
+  reduceMotion: ReduceMotionChoice;
   /** Board skin id, see ui/skins. */
   skin: string;
   /** Piece set id, see ui/skins. */
@@ -28,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sound: true,
   patterns: false,
   theme: 'system',
+  reduceMotion: 'system',
   skin: 'classic',
   pieces: 'classic',
   variants: { ...DEFAULT_RULES },
@@ -40,6 +45,17 @@ interface SettingsApi {
   ready: boolean;
   update: (patch: Partial<Settings>) => void;
   setVariant: (name: string, on: boolean) => void;
+  /** Every setting back to its default. What the player has already seen stays seen. */
+  reset: () => void;
+}
+
+/**
+ * The record Reset writes: the defaults, with the onboarding flag carried over,
+ * because it records what was seen rather than a preference — a reset that
+ * brought the welcome back would be a nag, not a default.
+ */
+export function resetSettings(prev: Settings): Settings {
+  return { ...DEFAULT_SETTINGS, welcomed: prev.welcomed };
 }
 
 const Ctx = createContext<SettingsApi>({
@@ -47,6 +63,7 @@ const Ctx = createContext<SettingsApi>({
   ready: false,
   update: () => {},
   setVariant: () => {},
+  reset: () => {},
 });
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -79,7 +96,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setSettings((s) => ({ ...s, variants: { ...s.variants, [name]: on } }));
   }, []);
 
-  const api = useMemo(() => ({ settings, ready, update, setVariant }), [settings, ready, update, setVariant]);
+  const reset = useCallback(() => setSettings(resetSettings), []);
+
+  const api = useMemo(() => ({ settings, ready, update, setVariant, reset }), [settings, ready, update, setVariant, reset]);
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }
 
