@@ -34,7 +34,7 @@ import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
 import { decodeGame, shareOffer } from '../app/share';
 import { GameSetup, botShouldAct, gameOverVisible, saveDecision } from '../app/setup';
-import { PUZZLES, puzzleById } from '../puzzles';
+import { PUZZLES, puzzleAfter, puzzleById } from '../puzzles';
 import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
 import { NewGameModal } from './NewGameModal';
@@ -244,7 +244,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
   const bot = game.setup.bot;
   const puzzle = game.setup.mode === 'puzzle' && game.setup.puzzleId ? puzzleById(game.setup.puzzleId) : undefined;
   const puzzleIndex = puzzle ? PUZZLES.findIndex((p) => p.id === puzzle.id) : -1;
-  const nextPuzzle = puzzleIndex >= 0 ? PUZZLES[puzzleIndex + 1] : undefined;
+  const nextPuzzle = puzzle ? puzzleAfter(puzzle.id) : undefined;
   const survive = puzzle?.goal === 'survive';
   const puzzleSolved =
     !!puzzle &&

@@ -1,4 +1,4 @@
-import { boardFromRows, index, initialBoard } from '../board';
+import { boardFromRows, index, initialBoard, rowOf } from '../board';
 import { BotLevel, chooseAction, enumerateActions, playTurn } from '../bot';
 import { Action, GameState, applyAction, hasAnyAction, mandatoryTimelines, newGame, pendingTimelines } from '../multiverse';
 
@@ -39,6 +39,22 @@ describe('bot', () => {
     g = [step(0, index(2, 1), index(3, 0)), step(0, index(5, 6), index(4, 7)), step(0, index(2, 3), index(3, 2)), step(0, index(5, 4), index(4, 5))].reduce((s, a) => applyAction(s, a), g);
     expect(enumerateActions(g, 1).every((a) => a.type === 'move')).toBe(true);
     expect(enumerateActions(g, 3).some((a) => a.type === 'travel')).toBe(true);
+  });
+
+  it('level 1 takes a crowning move on any draw under 0.8', () => {
+    // Red's man on b7 can step onto rank 8 either side and be crowned; the
+    // one on f3 can only step to rank 4. No capture is on and Black keeps a
+    // move whatever Red does, so no action wins outright and the Novice's
+    // crowning preference is the only thing that decides.
+    const g = withBoard(['........', '.r......', '......b.', '........', '........', '.....r..', '........', '........'], 0);
+    const moves = enumerateActions(g, 1).filter((a): a is Extract<Action, { type: 'move' }> => a.type === 'move');
+    // Red crowns on rank 8, row index 7.
+    const crowns = (a: Action) => a.type === 'move' && rowOf(a.move.path[a.move.path.length - 1]!) === 7;
+    expect(moves.filter(crowns)).toHaveLength(2);
+    expect(moves.filter((a) => !crowns(a))).toHaveLength(2);
+    expect(moves.some((a) => applyAction(g, a).status !== 'playing')).toBe(false);
+    // A draw under 0.8 takes a crowning move, whichever one the next draw picks.
+    for (const draw of [0, 0.3, 0.79]) expect(crowns(chooseAction(g, 1, () => draw)!)).toBe(true);
   });
 
   it('plays every waiting board before its turn ends', () => {

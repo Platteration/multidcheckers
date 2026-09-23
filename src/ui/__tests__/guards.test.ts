@@ -9,6 +9,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Action, applyAction, getTimeline, index, newGame } from '../../engine';
+import { PUZZLES, puzzleAfter } from '../../puzzles';
 import { linkNeedsConfirming, squareLabel, travelOrigin } from '../guards';
 import type { Selection } from '../useGame';
 
@@ -139,6 +140,24 @@ describe('a saved game that could not be read', () => {
     expect(screen).toMatch(/saveDecision\(game\.history, game\.setup, !keepStoredRef\.current\)/);
     expect(screen).toMatch(/decision\.kind === 'keep'\) \{[^}]*setSaveNote\(decision\.problem\)/);
     expect(screen).toMatch(/game\.error \?\? linkProblem \?\? saveNote \?\? hint/);
+  });
+});
+
+describe('the next puzzle', () => {
+  it('is the one after this in the list, and nothing after the last', () => {
+    // The result sheet offers Next only when there is one; after the last
+    // puzzle the button is hidden, not a button that closes the sheet.
+    expect(PUZZLES.length).toBeGreaterThan(1);
+    PUZZLES.forEach((p, i) => expect(puzzleAfter(p.id)).toBe(PUZZLES[i + 1]));
+    expect(puzzleAfter(PUZZLES[PUZZLES.length - 1]!.id)).toBeUndefined();
+    expect(puzzleAfter('no-such-puzzle')).toBeUndefined();
+  });
+
+  it('is what the result sheet is told about', () => {
+    const src = source('GameScreen.tsx');
+    expect(src).toMatch(/const nextPuzzle = puzzle \? puzzleAfter\(puzzle\.id\) : undefined;/);
+    expect(src).toMatch(/hasNext=\{!!nextPuzzle\}/);
+    expect(src).toMatch(/if \(nextPuzzle\) game\.startPuzzle\(nextPuzzle\);/);
   });
 });
 
