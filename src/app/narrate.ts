@@ -1,4 +1,4 @@
-import { GameState, Rules, colOf, playerToMoveAt, rowOf, timelineLabel } from '../engine';
+import { GameState, Rules, colOf, moveTarget, playerToMoveAt, rowOf, timelineLabel } from '../engine';
 
 /**
  * The rule variants in force, or '' when none are. A game loaded from someone
@@ -27,7 +27,7 @@ export function narrate(state: GameState, names: readonly [string, string]): str
   const who = names[playerToMoveAt(created.turn - 1)];
   let text: string;
   if (a.type === 'move') {
-    const to = a.move.path[a.move.path.length - 1];
+    const to = moveTarget(a.move);
     text =
       a.move.captures.length > 0
         ? `${who} jumped from ${squareName(a.move.from)} to ${squareName(to)} on ${timelineLabel(a.timeline)}, taking ${a.move.captures.length}.`

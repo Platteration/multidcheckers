@@ -16,7 +16,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 import React from 'react';
 import { Animated, ScrollView, StyleSheet } from 'react-native';
 import TestRenderer, { ReactTestInstance, ReactTestRenderer, act } from 'react-test-renderer';
-import { Action, BoardRef, GameState, Timeline, applyAction, index, newGame, timelineLabel } from '../../engine';
+import { Action, BoardRef, GameState, Timeline, applyAction, getTimeline, index, latestBoard, newGame, timelineLabel } from '../../engine';
 import { ROW, SLOT, MultiverseMap } from '../MultiverseMap';
 
 /** A phone-sized map pane. */
@@ -29,7 +29,7 @@ const VIEWPORT = { width: 380, height: 260 };
  */
 function multiverse(timelines: number, boardsEach: number): GameState {
   const start = newGame();
-  const board = start.timelines[0].boards[0];
+  const board = latestBoard(getTimeline(start, 0));
   const rows: Timeline[] = Array.from({ length: timelines }, (_, id) => ({
     id,
     startTurn: 0,
@@ -56,15 +56,15 @@ const scrollViews = (tree: ReactTestRenderer): ReactTestInstance[] => tree.root.
 
 const layout = (tree: ReactTestRenderer, size: { width: number; height: number }) =>
   act(() => {
-    (scrollViews(tree)[0].props.onLayout as (e: unknown) => void)({ nativeEvent: { layout: { ...size, x: 0, y: 0 } } });
+    (scrollViews(tree)[0]!.props.onLayout as (e: unknown) => void)({ nativeEvent: { layout: { ...size, x: 0, y: 0 } } });
   });
 
 /** The scroll the focus effect's scrollTo would produce, delivered by hand. */
 const scrollTo = (tree: ReactTestRenderer, to: { x: number; y: number }) =>
   act(() => {
     const [horizontal, vertical] = scrollViews(tree);
-    (horizontal.props.onScroll as (e: unknown) => void)({ nativeEvent: { contentOffset: { x: to.x, y: 0 } } });
-    (vertical.props.onScroll as (e: unknown) => void)({ nativeEvent: { contentOffset: { x: 0, y: to.y } } });
+    (horizontal!.props.onScroll as (e: unknown) => void)({ nativeEvent: { contentOffset: { x: to.x, y: 0 } } });
+    (vertical!.props.onScroll as (e: unknown) => void)({ nativeEvent: { contentOffset: { x: 0, y: to.y } } });
   });
 
 /** The host views of the tree: one node per thing on screen, composites aside. */
@@ -170,7 +170,7 @@ describe('the flight a time travel draws across the map', () => {
     // below would pass with the guard deleted.
     expect(travelled.lastAction?.type).toBe('travel');
     expect(travelled.lastCreated).toHaveLength(2);
-    const tree = render(travelled, travelled.lastCreated[1]);
+    const tree = render(travelled, travelled.lastCreated[1]!);
     expect(timing).toHaveBeenCalled();
     act(() => tree.unmount());
   });
@@ -178,7 +178,7 @@ describe('the flight a time travel draws across the map', () => {
   it('is skipped when the player, or their device, asked for less motion', () => {
     // The only thing reduce motion switches off. The scroll still happens, and
     // still lands on the same board: see focusScroll in map.test.ts.
-    const tree = render(travelled, travelled.lastCreated[1], true);
+    const tree = render(travelled, travelled.lastCreated[1]!, true);
     expect(timing).not.toHaveBeenCalled();
     act(() => tree.unmount());
   });

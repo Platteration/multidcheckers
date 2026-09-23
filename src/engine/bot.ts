@@ -14,6 +14,7 @@ import {
   GameState,
   applyAction,
   canEndTurn,
+  getTimeline,
   latestBoard,
   mandatoryTimelines,
   pendingTimelines,
@@ -106,16 +107,18 @@ export function chooseAction(state: GameState, level: BotLevel, rng: Rng = Math.
   // not a loss and someone has to play it: the lower levels fall back to the
   // full action list rather than having nothing to return.
   if (actions.length === 0) actions = enumerateActions(state, 3);
-  if (actions.length === 0) return null;
   if (actions.length > MAX_CANDIDATES) {
     const plain = actions.filter((a) => a.type !== 'travel');
     const travels = actions.filter((a) => a.type === 'travel');
     for (let i = travels.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
-      [travels[i], travels[j]] = [travels[j], travels[i]];
+      [travels[i], travels[j]] = [travels[j]!, travels[i]!];
     }
     actions = [...plain, ...travels.slice(0, Math.max(0, MAX_CANDIDATES - plain.length))];
   }
+  // Sampling keeps at least one candidate, so this is empty only when nothing was legal.
+  const first = actions[0];
+  if (!first) return null;
 
   // Immediate wins first, at every level.
   for (const a of actions) {
@@ -125,10 +128,10 @@ export function chooseAction(state: GameState, level: BotLevel, rng: Rng = Math.
 
   if (level === 1) {
     const moves = actions.filter((a): a is Extract<Action, { type: 'move' }> => a.type === 'move');
-    const crowning = moves.filter((a) => !pieceAt(latestBoard(state.timelines[a.timeline]), a.move.from)!.king && rowOf(moveTarget(a.move)) === crownRow(me));
-    if (crowning.length && rng() < 0.8) return crowning[Math.floor(rng() * crowning.length)];
+    const crowning = moves.filter((a) => !pieceAt(latestBoard(getTimeline(state, a.timeline)), a.move.from)!.king && rowOf(moveTarget(a.move)) === crownRow(me));
+    if (crowning.length && rng() < 0.8) return crowning[Math.floor(rng() * crowning.length)]!;
     // Captures are already forced by the rules; among what is legal, wander.
-    return moves[Math.floor(rng() * moves.length)] ?? actions[0];
+    return moves[Math.floor(rng() * moves.length)] ?? first;
   }
 
   let best: Action[] = [];
@@ -151,7 +154,7 @@ export function chooseAction(state: GameState, level: BotLevel, rng: Rng = Math.
       best.push(a);
     }
   }
-  return best[Math.floor(rng() * best.length)] ?? actions[0];
+  return best[Math.floor(rng() * best.length)] ?? first;
 }
 
 /**

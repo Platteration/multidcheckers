@@ -8,10 +8,12 @@ import {
   applyAction,
   canEndTurn,
   getBoard,
+  getTimeline,
   mandatoryTimelines,
   optionalTimelines,
   presentTurn,
   hasAnyAction,
+  latestBoard,
   latestRefIn,
   latestTurn,
   newGame,
@@ -42,7 +44,7 @@ describe('multiverse basics', () => {
   it('passes the turn after a move', () => {
     const g = play(newGame(), step(0, index(2, 1), index(3, 0)));
     expect(g.toMove).toBe(1);
-    expect(latestTurn(g.timelines[0])).toBe(1);
+    expect(latestTurn(getTimeline(g, 0))).toBe(1);
     expect(pieceAt(getBoard(g, { timeline: 0, turn: 1 })!, index(3, 0))).toEqual({ player: 0, king: false });
   });
 
@@ -85,7 +87,7 @@ describe('time travel', () => {
     const origin = getBoard(g, { timeline: 0, turn: 5 })!;
     expect(pieceAt(origin, index(3, 2))).toBeNull();
     expect(pieceAt(origin, index(3, 0))).toEqual({ player: 0, king: false });
-    const branch = g.timelines[1];
+    const branch = getTimeline(g, 1);
     expect(branch.startTurn).toBe(3);
     expect(branch.branchedFrom).toEqual({ timeline: 0, turn: 2 });
     expect(branch.origin).toEqual({ timeline: 0, turn: 4 });
@@ -120,6 +122,18 @@ describe('time travel', () => {
     expect(() => applyAction(base, taken)).toThrow(IllegalAction);
   });
 
+  it('has no square off the board to travel from or to', () => {
+    // A travel read out of a game code or a saved game names its square itself,
+    // and pieceAt answers undefined for one the board does not have: not an
+    // empty square to land on, and not a piece to send.
+    for (const square of [-1, 64, 1.5]) {
+      expect(pieceAt(latestBoard(getTimeline(base, 0)), square)).toBeUndefined();
+      expect(travelTargets(base, 0, square)).toEqual([]);
+      const offBoard: Action = { type: 'travel', from: { timeline: 0, square }, to: { timeline: 0, turn: 0 } };
+      expect(() => applyAction(base, offBoard)).toThrow(IllegalAction);
+    }
+  });
+
   it('lets a piece escape a mandatory capture by leaving the present', () => {
     // Red man at (3,0) can be captured? No: set up a position where Red must
     // capture, and instead travels.
@@ -149,7 +163,7 @@ describe('time travel', () => {
         },
       ],
     };
-    expect(legalMoves(getBoard(g, { timeline: 0, turn: 2 })!, 0)[0].captures).toHaveLength(1);
+    expect(legalMoves(getBoard(g, { timeline: 0, turn: 2 })!, 0)[0]?.captures).toHaveLength(1);
     const quiet = step(0, index(2, 2), index(3, 1));
     expect(() => applyAction(g, quiet)).toThrow(/must capture/);
     const fled = applyAction(g, { type: 'travel', from: { timeline: 0, square: index(2, 2) }, to: { timeline: 0, turn: 0 } });
@@ -216,7 +230,7 @@ describe('winning', () => {
       toMove: 1,
     };
     // Turn 2 is Red's; pretend Red just moved and see what happens to Black.
-    const before: GameState = { ...g, toMove: 0, timelines: [{ ...g.timelines[0], boards: [stuck, stuck, stuck, stuck] }] };
+    const before: GameState = { ...g, toMove: 0, timelines: [{ ...getTimeline(g, 0), boards: [stuck, stuck, stuck, stuck] }] };
     expect(pendingTimelines(before)).toHaveLength(0); // turn 3 is Black's
     const after = resolveTurn(before);
     expect(hasAnyAction({ ...before, toMove: 1 }, 0)).toBe(false);

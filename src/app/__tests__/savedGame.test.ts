@@ -24,9 +24,9 @@ function sampleHistory(): GameState[] {
     move(index(5, 4), index(4, 5)),
     { type: 'travel', from: { timeline: 0, square: index(3, 2) }, to: { timeline: 0, turn: 2 } },
   ];
-  const history = opening.reduce((h, a) => [...h, applyAction(h[h.length - 1], a)], [newGame()]);
+  const history = opening.reduce((h, a) => [...h, applyAction(h[h.length - 1]!, a)], [newGame()]);
   for (let i = 0; i < 4; i++) {
-    const state = history[history.length - 1];
+    const state = history[history.length - 1]!;
     const quiet = enumerateActions(state, 3).find((a) => a.type === 'move' && a.move.captures.length === 0);
     if (!quiet) break;
     history.push(applyAction(state, quiet));
@@ -54,7 +54,7 @@ describe('the game in storage', () => {
   it('rebuilds exactly the game that was saved', () => {
     const history = sampleHistory();
     expect(history.length).toBeGreaterThan(6);
-    expect(history[history.length - 1].timelines).toHaveLength(2);
+    expect(history[history.length - 1]?.timelines).toHaveLength(2);
     const restored = asGame(restoreSaved(stored(history, LOCAL)));
     expect(restored.history).toHaveLength(history.length);
     expect(restored.history).toEqual(history);
@@ -99,7 +99,7 @@ describe('the game in storage', () => {
     // way. This one is past the size an imported code is refused for, and it
     // has to still be there in the morning, whole.
     const history = grownTo(MAX_BOARDS + 1);
-    const last = history[history.length - 1];
+    const last = history[history.length - 1]!;
     // Big enough to be the case under test, counted from the game itself.
     expect(tooLargeToDraw(last)).toBe(true);
     expect(shareOffer(history, LOCAL).code).toBeNull();

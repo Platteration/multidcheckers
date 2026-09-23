@@ -8,7 +8,7 @@
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { Action, applyAction, index, newGame } from '../../engine';
+import { Action, applyAction, getTimeline, index, newGame } from '../../engine';
 import { linkNeedsConfirming, squareLabel, travelOrigin } from '../guards';
 import type { Selection } from '../useGame';
 
@@ -39,7 +39,7 @@ describe('the origin of a picked-up piece', () => {
 
   it('is the newest board of the timeline the piece sits on', () => {
     expect(branched.timelines).toHaveLength(2);
-    const second = branched.timelines[1];
+    const second = getTimeline(branched, 1);
     expect(travelOrigin(branched, holding, false)).toEqual({ timeline: 1, turn: second.startTurn + second.boards.length - 1 });
     expect(travelOrigin(branched, { kind: 'none' }, false)).toBeNull();
   });

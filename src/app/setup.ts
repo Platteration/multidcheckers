@@ -92,7 +92,7 @@ export type SaveDecision =
  * to match it would delete their last game for them.
  */
 export function saveDecision(history: GameState[], setup: GameSetup, mayClear = true): SaveDecision {
-  const nothingToSave = history.length <= 1 || history[history.length - 1].status !== 'playing';
+  const nothingToSave = history.length <= 1 || history[history.length - 1]!.status !== 'playing';
   if (nothingToSave) return mayClear ? { kind: 'clear' } : { kind: 'keep', problem: UNREADABLE_SAVE_NOTE };
   const actions = actionsOf(history);
   // Bounded where the list is written, not only where it is read. The read-side
@@ -104,7 +104,7 @@ export function saveDecision(history: GameState[], setup: GameSetup, mayClear = 
       problem: `This game is longer than the app can store, so the copy on this device stops at move ${MAX_ACTIONS}.`,
     };
   }
-  return { kind: 'write', payload: { version: 3, actions, rules: history[0].rules, setup } };
+  return { kind: 'write', payload: { version: 3, actions, rules: history[0]!.rules, setup } };
 }
 
 /**
@@ -263,8 +263,12 @@ export function normaliseSaved(v: AnySaved): { history: GameState[]; setup: Game
   const start = setup.mode === 'puzzle' ? puzzleById(setup.puzzleId ?? '')?.state : newGame(cleanRules(rules));
   if (!start) return null;
   const history: GameState[] = [start];
+  let state = start;
   try {
-    for (const action of actions) history.push(applyAction(history[history.length - 1], action));
+    for (const action of actions) {
+      state = applyAction(state, action);
+      history.push(state);
+    }
   } catch {
     return null;
   }

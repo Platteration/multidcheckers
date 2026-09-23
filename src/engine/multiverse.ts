@@ -42,6 +42,7 @@ export interface Timeline {
   id: number;
   /** Turn index of boards[0]. The root timeline starts at 0. */
   startTurn: number;
+  /** Never empty: a timeline is made with the board it starts from, and boards are only added. */
   boards: Board[];
   /** Who created this timeline by travelling. null for the root timeline. */
   createdBy: Player | null;
@@ -120,7 +121,7 @@ export function latestTurn(tl: Timeline): number {
 }
 
 export function latestBoard(tl: Timeline): Board {
-  return tl.boards[tl.boards.length - 1];
+  return tl.boards[tl.boards.length - 1]!;
 }
 
 export function latestRef(tl: Timeline): BoardRef {
@@ -266,6 +267,13 @@ export function applyAction(state: GameState, action: Action): GameState {
   }
   const timelines = state.timelines.map((tl) => ({ ...tl, boards: tl.boards.slice() }));
   const created: BoardRef[] = [];
+  // Every caller below has just found this timeline in `state`, whose copy is
+  // at the same index: a timeline's id is its place in the list.
+  const extend = (id: number, board: Board) => {
+    const tl = timelines[id]!;
+    tl.boards.push(board);
+    created.push(latestRef(tl));
+  };
   let quietPlies = 0;
 
   if (action.type === 'move') {
@@ -276,8 +284,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const mustCapture = legal.some((m) => m.captures.length > 0) && action.move.captures.length === 0;
       throw new IllegalAction(mustCapture ? 'you must capture when you can' : 'that move is not legal');
     }
-    timelines[tl.id].boards.push(applyMove(board, action.move));
-    created.push(latestRef(timelines[tl.id]));
+    extend(tl.id, applyMove(board, action.move));
     const mover = pieceAt(board, action.move.from)!;
     const crowned = !mover.king && rowOf(moveTarget(action.move)) === crownRow(me);
     quietPlies = action.move.captures.length > 0 || crowned ? 0 : state.quietPlies + 1;
@@ -295,8 +302,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     const arrived = placePiece(target, action.from.square, piece);
     if (!arrived) throw new IllegalAction('that square is taken on the past board');
 
-    timelines[from.id].boards.push(removePiece(originBoard, action.from.square));
-    created.push(latestRef(timelines[from.id]));
+    extend(from.id, removePiece(originBoard, action.from.square));
 
     const branch: Timeline = {
       id: timelines.length,

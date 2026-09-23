@@ -16,7 +16,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 import React from 'react';
 import TestRenderer, { ReactTestInstance, ReactTestRenderer, act } from 'react-test-renderer';
-import { SIZE, index, isPlayable, newGame } from '../../engine';
+import { SIZE, getTimeline, index, isPlayable, latestBoard, newGame } from '../../engine';
 import { CheckerBoard } from '../CheckerBoard';
 
 type Props = React.ComponentProps<typeof CheckerBoard>;
@@ -26,7 +26,7 @@ function render(props: Partial<Props>) {
   let tree!: ReactTestRenderer;
   act(() => {
     tree = TestRenderer.create(
-      React.createElement(CheckerBoard, { board: newGame().timelines[0].boards[0], cellSize: 30, interactive: true, ...props }),
+      React.createElement(CheckerBoard, { board: latestBoard(getTimeline(newGame(), 0)), cellSize: 30, interactive: true, ...props }),
     );
   });
   // The Pressable itself carries the handler, the label and `disabled`; the

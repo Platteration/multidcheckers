@@ -24,12 +24,12 @@ export function codeFromUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const parts = partsOf(url);
   if (!parts) return null;
-  const match = /[?&#]code=([^&#]+)/.exec(parts.query + parts.hash);
-  if (match) {
+  const found = /[?&#]code=([^&#]+)/.exec(parts.query + parts.hash)?.[1];
+  if (found !== undefined) {
     try {
-      return decodeURIComponent(match[1]);
+      return decodeURIComponent(found);
     } catch {
-      return match[1];
+      return found;
     }
   }
   // The last path segment only, out of the parsed path and never out of the
@@ -38,8 +38,7 @@ export function codeFromUrl(url: string | null | undefined): string | null {
   // the fragment, or out of the host of a custom-scheme link is one the cleaner
   // leaves where it is, and a code left in the address bar is imported again on
   // every reload.
-  const path = /\/load\/([^/?#]+)\/?$/.exec(parts.path);
-  return path ? path[1] : null;
+  return /\/load\/([^/?#]+)\/?$/.exec(parts.path)?.[1] ?? null;
 }
 
 /** A shareable link for the web build, or null when not running on the web. */

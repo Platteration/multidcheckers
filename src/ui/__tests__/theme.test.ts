@@ -9,19 +9,21 @@ const SCHEMES: readonly Scheme[] = ['light', 'dark'];
 
 /** WCAG 2.1 relative luminance of a #rrggbb colour. */
 function luminance(hex: string): number {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!match) throw new Error(`not a six-digit hex colour: ${hex}`);
-  const value = parseInt(match[1], 16);
-  const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255]
-    .map((c) => c / 255)
-    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const digits = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
+  if (digits === undefined) throw new Error(`not a six-digit hex colour: ${hex}`);
+  const value = parseInt(digits, 16);
+  const channel = (byte: number): number => {
+    const c = byte / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
 }
 
 /** WCAG 2.1 contrast ratio: 1 for two identical colours, 21 for black on white. */
 function contrast(a: string, b: string): number {
-  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (lighter + 0.05) / (darker + 0.05);
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
 /** AA wants 4.5:1, or 3:1 for large text — 18.66px bold, or 24px at any weight. */

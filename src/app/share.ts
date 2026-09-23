@@ -70,8 +70,9 @@ interface Payload {
   a: Action[];
 }
 
+/** A game as a code. A history always holds the state the game started from. */
 export function encodeGame(history: GameState[], setup: GameSetup): string {
-  const payload: Payload = { v: 1, r: history[0].rules, m: setup.mode === 'puzzle' ? 'local' : setup.mode, a: actionsOf(history) };
+  const payload: Payload = { v: 1, r: history[0]!.rules, m: setup.mode === 'puzzle' ? 'local' : setup.mode, a: actionsOf(history) };
   return PREFIX + encode(JSON.stringify(payload));
 }
 
@@ -95,7 +96,7 @@ export function shareOffer(history: GameState[], setup: GameSetup): ShareOffer {
   // A puzzle is the app's own position, not a game to hand on, and a game
   // nobody has moved in yet is nothing to send.
   if (history.length <= 1 || setup.mode === 'puzzle') return { code: null, problem: null };
-  const state = history[history.length - 1];
+  const state = history[history.length - 1]!;
   if (actionsOf(history).length > MAX_ACTIONS) {
     return { code: null, problem: 'This game has more moves than a code can carry, so it cannot be sent. You can still play it here.' };
   }
@@ -134,16 +135,18 @@ export function decodeGame(code: string): { history: GameState[]; setup: GameSet
   if (payload.a.length > MAX_ACTIONS) throw new Error('That game has too many moves to load.');
   // The sender picks the rule variants, so they are read as booleans of our own
   // making: nothing else from the payload reaches the engine's rules.
-  const history: GameState[] = [newGame(cleanRules(payload.r))];
+  let state = newGame(cleanRules(payload.r));
+  const history: GameState[] = [state];
   for (const action of payload.a) {
     try {
-      history.push(applyAction(history[history.length - 1], action));
+      state = applyAction(state, action);
     } catch {
       throw new Error('That code contains a move that is not legal.');
     }
+    history.push(state);
     // Check the size that actually costs, and check it as the replay grows
     // rather than once it has finished growing.
-    if (tooLargeToDraw(history[history.length - 1])) throw new Error('That game has grown too large for this app to draw.');
+    if (tooLargeToDraw(state)) throw new Error('That game has grown too large for this app to draw.');
   }
   return { history, setup: payload.m === 'bot' ? { mode: 'local' } : DEFAULT_SETUP };
 }

@@ -48,7 +48,7 @@ describe('bot', () => {
     expect(pendingTimelines(g)).toHaveLength(2);
     const steps = playTurn(g, { level: 2, player: 1 }, seeded());
     expect(steps).toHaveLength(2);
-    expect(steps[1].toMove).toBe(0);
+    expect(steps[1]?.toMove).toBe(0);
   });
 
   // A board can be blocked solid and still allow a time travel. The rules count

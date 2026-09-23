@@ -1,7 +1,7 @@
 import { decode, encode } from '../../app/base64';
 import { MAX_BOARDS, MAX_TIMELINES, decodeGame, encodeGame, shareOffer, tooLargeToDraw } from '../../app/share';
 import { MAX_ACTIONS, actionsOf } from '../../app/setup';
-import { Action, GameState, Timeline, applyAction, index, newGame } from '../index';
+import { Action, GameState, Timeline, applyAction, getTimeline, index, latestBoard, newGame } from '../index';
 import { boardsIn, grownTo } from './helpers';
 
 /** A code built by hand, so a payload the app would never write can be tested. */
@@ -14,7 +14,7 @@ const LOCAL = { mode: 'local' } as const;
 /** A state of a size no game has to be played to reach: only the counts matter. */
 function sized(timelines: number, boards: number): GameState {
   const start = newGame();
-  const board = start.timelines[0].boards[0];
+  const board = latestBoard(getTimeline(start, 0));
   const per = Math.floor(boards / timelines);
   const rows: Timeline[] = Array.from({ length: timelines }, (_, id) => ({
     id,
@@ -46,13 +46,13 @@ describe('game codes', () => {
       step(index(5, 4), index(4, 5)),
       { type: 'travel', from: { timeline: 0, square: index(3, 2) }, to: { timeline: 0, turn: 2 } },
     ];
-    const history = actions.reduce((h, a) => [...h, applyAction(h[h.length - 1], a)], [newGame({ flyingKings: true })]);
+    const history = actions.reduce((h, a) => [...h, applyAction(h[h.length - 1]!, a)], [newGame({ flyingKings: true })]);
     const code = encodeGame(history, { mode: 'local' });
     expect(code.startsWith('5DCK.')).toBe(true);
     const loaded = decodeGame(code);
     expect(loaded.history).toHaveLength(history.length);
     expect(loaded.history[loaded.history.length - 1]).toEqual(history[history.length - 1]);
-    expect(loaded.history[0].rules.flyingKings).toBe(true);
+    expect(loaded.history[0]?.rules.flyingKings).toBe(true);
   });
 
   it('rejects junk codes', () => {
@@ -65,7 +65,7 @@ describe('game codes', () => {
     // tokens. None of the whitespace belongs to the alphabet, so a wrapped
     // code used to fail as 'damaged' when it had survived the trip intact.
     const actions: Action[] = [step(index(2, 1), index(3, 0)), step(index(5, 6), index(4, 7))];
-    const history = actions.reduce((h, a) => [...h, applyAction(h[h.length - 1], a)], [newGame()]);
+    const history = actions.reduce((h, a) => [...h, applyAction(h[h.length - 1]!, a)], [newGame()]);
     const code = encodeGame(history, { mode: 'local' });
     const wrapped = (code.match(/.{1,40}/g) ?? []).join('\n');
     expect(wrapped).not.toBe(code);
@@ -80,8 +80,8 @@ describe('game codes', () => {
     const loaded = decodeGame(
       codeFor({ v: 1, r: { flyingKings: 1, backCapture: 0, strictPresent: null, sneaky: true }, m: 'local', a: [] }),
     );
-    expect(loaded.history[0].rules).toEqual({ flyingKings: true, backCapture: false, strictPresent: false });
-    expect(decodeGame(codeFor({ v: 1, r: null, m: 'local', a: [] })).history[0].rules).toEqual({
+    expect(loaded.history[0]?.rules).toEqual({ flyingKings: true, backCapture: false, strictPresent: false });
+    expect(decodeGame(codeFor({ v: 1, r: null, m: 'local', a: [] })).history[0]?.rules).toEqual({
       flyingKings: false,
       backCapture: false,
       strictPresent: false,
@@ -131,7 +131,7 @@ describe('game codes', () => {
     // far longer than most games, reach 78 timelines and 478 boards.
     const played = grownTo(500);
     expect(actionsOf(played).length).toBeGreaterThan(250);
-    expect(played[played.length - 1].timelines.length).toBeGreaterThan(200);
+    expect(played[played.length - 1]?.timelines.length).toBeGreaterThan(200);
     const loaded = decodeGame(encodeGame(played, LOCAL));
     expect(loaded.history).toHaveLength(played.length);
     expect(loaded.history[loaded.history.length - 1]).toEqual(played[played.length - 1]);
@@ -151,7 +151,7 @@ describe('game codes', () => {
     // Measured, not derived: the fastest-growing legal play crosses the board
     // cap while its timelines are still short of theirs, so the half nobody
     // pinned is the half that decides whether a real game can be sent.
-    const last = OVER_THE_CEILING[OVER_THE_CEILING.length - 1];
+    const last = OVER_THE_CEILING[OVER_THE_CEILING.length - 1]!;
     expect(boardsIn(last)).toBeGreaterThan(MAX_BOARDS);
     expect(last.timelines.length).toBeLessThan(MAX_TIMELINES);
   });

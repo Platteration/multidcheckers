@@ -37,7 +37,7 @@ function playOut(n: number, from: GameState = newGame()): GameState[] {
   const rng = seeded(7);
   const history: GameState[] = [from];
   while (history.length <= n) {
-    const state = history[history.length - 1];
+    const state = history[history.length - 1]!;
     if (state.status !== 'playing') break;
     const action = chooseAction(state, 3, rng);
     if (!action) break;
@@ -102,7 +102,7 @@ describe('what the autosave writes', () => {
   it('keeps the rule variants a game was started with', () => {
     const history = playOut(4, newGame({ flyingKings: true, backCapture: true }));
     const restored = normaliseSaved(written(history, LOCAL)!)!;
-    expect(restored.history[0].rules).toEqual(history[0].rules);
+    expect(restored.history[0]!.rules).toEqual(history[0]!.rules);
   });
 
   it('rebuilds a puzzle from the puzzle, not from a fresh board', () => {
@@ -206,7 +206,7 @@ describe('what the autosave reads back', () => {
     expect(looksLikeSavedGame(junk)).toBe(true);
     const restored = normaliseSaved(junk)!;
     expect(restored).not.toBeNull();
-    expect(pendingTimelines(restored.history[0])).toHaveLength(1);
+    expect(pendingTimelines(restored.history[0]!)).toHaveLength(1);
     expect(restored.history[0]).toEqual(newGame());
   });
 
@@ -242,7 +242,7 @@ describe('what the autosave reads back', () => {
     // a pasted code costs them nothing they had. The bounds that are left here
     // are the action cap below and the rules themselves.
     const history = grownTo(400);
-    const last = history[history.length - 1];
+    const last = history[history.length - 1]!;
     // Larger than 1,100 actions of the strongest bot ever built (142 timelines).
     expect(last.timelines.length).toBeGreaterThan(142);
     const restored = normaliseSaved(written(history, LOCAL)!)!;
@@ -281,7 +281,7 @@ describe('what the autosave reads back', () => {
 
   it('gives up on a game whose actions do not replay', () => {
     const payload = written(GAME.slice(0, 7), LOCAL)!;
-    expect(normaliseSaved({ ...payload, actions: [...payload.actions, payload.actions[0]] })).toBeNull();
+    expect(normaliseSaved({ ...payload, actions: [...payload.actions, payload.actions[0]!] })).toBeNull();
     expect(normaliseSaved({ ...payload, actions: ['nonsense' as never] })).toBeNull();
     expect(normaliseSaved({ ...payload, setup: { mode: 'puzzle', puzzleId: 'no-such-puzzle' } })).toBeNull();
   });

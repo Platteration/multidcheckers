@@ -27,8 +27,8 @@ import {
 export function travelHeavy(stop: (state: GameState) => boolean): GameState[] {
   const history: GameState[] = [newGame()];
   let nth = 0;
-  while (!stop(history[history.length - 1])) {
-    const state = history[history.length - 1];
+  while (!stop(history[history.length - 1]!)) {
+    const state = history[history.length - 1]!;
     if (state.status !== 'playing') break;
     const action = travelFirst(state, nth++);
     if (!action) break;
@@ -41,12 +41,12 @@ function travelFirst(state: GameState, nth: number): Action | null {
   for (const tl of pendingTimelines(state)) {
     for (const square of piecesOf(latestBoard(tl), state.toMove)) {
       const targets = travelTargets(state, tl.id, square);
-      if (targets.length) return { type: 'travel', from: { timeline: tl.id, square }, to: targets[nth % targets.length] };
+      if (targets.length) return { type: 'travel', from: { timeline: tl.id, square }, to: targets[nth % targets.length]! };
     }
   }
   for (const tl of pendingTimelines(state)) {
     const moves = legalMoves(latestBoard(tl), state.toMove, state.rules);
-    if (moves.length) return { type: 'move', timeline: tl.id, move: moves[0] };
+    if (moves.length) return { type: 'move', timeline: tl.id, move: moves[0]! };
   }
   return null;
 }

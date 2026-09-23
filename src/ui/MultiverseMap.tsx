@@ -147,13 +147,18 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard, red
   // A time travel: fly a token from the board the piece left to the board it created.
   const flight = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const flightOpacity = useRef(new Animated.Value(0)).current;
-  const travel = state.lastAction?.type === 'travel' && state.lastCreated.length === 2 ? state.lastAction : null;
-  const flightKey = travel ? `${state.timelines.length}-${state.lastCreated[1].timeline}-${state.lastCreated[1].turn}` : null;
+  // A travel creates two boards: the one the piece left, then the one it landed on.
+  const [left, landed] = state.lastCreated;
+  const travel =
+    state.lastAction?.type === 'travel' && state.lastCreated.length === 2 && left && landed
+      ? { from: state.lastAction.from.timeline, left, landed }
+      : null;
+  const flightKey = travel ? `${state.timelines.length}-${travel.landed.timeline}-${travel.landed.turn}` : null;
   useEffect(() => {
     if (!travel || reduceMotion) return;
-    const from = travel.from.timeline;
-    const fromTurn = state.lastCreated[0].turn - 1;
-    const to = state.lastCreated[1];
+    const from = travel.from;
+    const fromTurn = travel.left.turn - 1;
+    const to = travel.landed;
     const start = { x: (fromTurn + 1) * SLOT + MINI_WIDTH / 2, y: HEADER + from * ROW + 8 + MINI_HEIGHT / 2 };
     const end = { x: (to.turn + 1) * SLOT + MINI_WIDTH / 2, y: HEADER + to.timeline * ROW + 8 + MINI_HEIGHT / 2 };
     flight.setValue(start);
@@ -164,7 +169,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard, red
     ]).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flightKey]);
-  const travellerColor = travel ? colors.players[playerToMoveAt(state.lastCreated[0].turn - 1)] : colors.travel;
+  const travellerColor = travel ? colors.players[playerToMoveAt(travel.left.turn - 1)] : colors.travel;
 
   // Keep the focused board in view as the player jumps around the multiverse.
   // Also whenever the game itself changes shape: a multiverse that lost

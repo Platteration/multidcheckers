@@ -31,7 +31,8 @@ interface StatsApi {
 const Ctx = createContext<StatsApi>({ stats: EMPTY_STATS, recordGame: () => {} });
 
 export function summarise(history: GameState[], setup: GameSetup, stats: Stats): Stats {
-  const last = history[history.length - 1];
+  // A history always holds the state the game started from.
+  const last = history[history.length - 1]!;
   const key = setup.mode === 'bot' && setup.bot ? `bot${setup.bot.level}` : 'local';
   const human: Player | null = setup.mode === 'bot' && setup.bot ? (setup.bot.player === 0 ? 1 : 0) : null;
   const won = last.status === 'won' && human !== null && last.win?.player === human;

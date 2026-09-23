@@ -43,7 +43,7 @@ function withBranch(root: Board[], branch: { startTurn: number; boards: Board[];
   return {
     ...base,
     timelines: [
-      base.timelines[0],
+      ...base.timelines,
       {
         id: 1,
         startTurn: branch.startTurn,

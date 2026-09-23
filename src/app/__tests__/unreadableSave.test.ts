@@ -82,14 +82,14 @@ describe('a saved game the app cannot replay', () => {
     expect(JSON.parse(store.get(KEYS.setAside)!)).toEqual(JSON.parse(UNREADABLE));
     // The screen is told the record is not ours to clear, so a fresh game
     // started over it cannot quietly write the slot away either.
-    expect(mockScreen.props[mockScreen.props.length - 1].keepStoredGame).toBe(true);
-    expect(mockScreen.props[mockScreen.props.length - 1].initialHistory).toBeUndefined();
+    expect(mockScreen.props[mockScreen.props.length - 1]!.keepStoredGame).toBe(true);
+    expect(mockScreen.props[mockScreen.props.length - 1]!.initialHistory).toBeUndefined();
     await act(async () => first.unmount());
 
     // The next launch: nothing to read, nothing to replay, nothing to say.
     mockScreen.props = [];
     const second = await launch();
-    expect(mockScreen.props[mockScreen.props.length - 1].keepStoredGame).toBe(false);
+    expect(mockScreen.props[mockScreen.props.length - 1]!.keepStoredGame).toBe(false);
     expect(store.has(KEYS.setAside)).toBe(true);
     await act(async () => second.unmount());
   });
@@ -100,8 +100,8 @@ describe('a saved game the app cannot replay', () => {
     const tree = await launch();
     expect(store.has(KEYS.setAside)).toBe(false);
     expect(store.has(KEYS.game)).toBe(true);
-    expect(mockScreen.props[mockScreen.props.length - 1].keepStoredGame).toBe(false);
-    expect(mockScreen.props[mockScreen.props.length - 1].initialHistory).toBeDefined();
+    expect(mockScreen.props[mockScreen.props.length - 1]!.keepStoredGame).toBe(false);
+    expect(mockScreen.props[mockScreen.props.length - 1]!.initialHistory).toBeDefined();
     await act(async () => tree.unmount());
   });
 });
