@@ -121,7 +121,8 @@ npm run check             # all of the above: the gate before a push
 ```
 
 `.github/workflows/ci.yml` runs the lint, the typecheck, the tests, the
-conventions test and an Android and web export on every push.
+conventions test and an Android and web export on every push; a separate job
+runs `npm audit --omit=dev --audit-level=high` against the lockfile.
 
 ## Project layout
 
