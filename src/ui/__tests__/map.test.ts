@@ -1,0 +1,144 @@
+/**
+ * Which part of the multiverse map is drawn. Every board on it is a thumbnail
+ * of some seventy views and the board count grows with moves x timelines, so
+ * what the map costs to draw has to follow the size of the screen rather than
+ * the size of the game: a large multiverse, imported or played, would otherwise
+ * be a frozen app rather than a map that needs scrolling.
+ */
+// The map pulls in the thumbnails, which pull in the theme and with it the
+// storage the app keeps its settings in. None of that is under test here.
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
+}));
+
+import { MINI_HEIGHT, MINI_WIDTH } from '../MiniBoard';
+import { HEADER, ROW, SLOT, drawnBand, focusScroll, visibleBand } from '../MultiverseMap';
+
+/** A phone-sized map pane, and a few places the player might have scrolled it to. */
+const VIEWPORT = { width: 380, height: 260 };
+const SCROLLS = [
+  { x: 0, y: 0 },
+  { x: 37, y: 11 },
+  { x: SLOT * 4, y: ROW * 3 },
+  { x: SLOT * 240 + 5, y: ROW * 50 + 9 },
+];
+
+const turns = (band: { fromTurn: number; toTurn: number }) => band.toTurn - band.fromTurn + 1;
+const rows = (band: { fromTimeline: number; toTimeline: number }) => band.toTimeline - band.fromTimeline + 1;
+
+describe('the part of the map that gets drawn', () => {
+  it('covers every board the viewport shows', () => {
+    // Skipping a board that is on screen is the way windowing goes wrong, so
+    // the band is checked against where the map actually puts each thumbnail.
+    for (const scroll of SCROLLS) {
+      const band = visibleBand(scroll, VIEWPORT);
+      for (let turn = 0; turn < 400; turn++) {
+        const left = (turn + 1) * SLOT;
+        if (left + MINI_WIDTH <= scroll.x || left >= scroll.x + VIEWPORT.width) continue;
+        expect(band.fromTurn).toBeLessThanOrEqual(turn);
+        expect(band.toTurn).toBeGreaterThanOrEqual(turn);
+      }
+      for (let timeline = 0; timeline < 400; timeline++) {
+        const top = HEADER + timeline * ROW + 8;
+        if (top + MINI_HEIGHT <= scroll.y || top >= scroll.y + VIEWPORT.height) continue;
+        expect(band.fromTimeline).toBeLessThanOrEqual(timeline);
+        expect(band.toTimeline).toBeGreaterThanOrEqual(timeline);
+      }
+    }
+  });
+
+  it('is the size of the screen wherever the map has been scrolled to', () => {
+    // Far into the biggest game this app will load, the band is what it is at
+    // the start: a screenful, and a couple of rows and columns either side.
+    const start = visibleBand({ x: 0, y: 0 }, VIEWPORT);
+    const deep = visibleBand({ x: 600 * SLOT, y: 96 * ROW }, VIEWPORT);
+    expect(turns(deep)).toBe(turns(start));
+    expect(rows(deep)).toBe(rows(start));
+    expect(turns(start)).toBeLessThan(VIEWPORT.width / SLOT + 8);
+    expect(rows(start)).toBeLessThan(VIEWPORT.height / ROW + 8);
+  });
+});
+
+describe('the band when the scroll position cannot be believed', () => {
+  // `scroll` only ever moves when the platform reports a scroll, so it can be
+  // pointing at a part of the multiverse that no longer exists - a new game or
+  // an undo under a map scrolled far down - or at nothing at all, before the
+  // first layout. Both draw an empty map that scrolling does not fix.
+  const BIG = { timelines: 120, lastTurn: 40 };
+  const deep = { x: SLOT * 30, y: ROW * 100 };
+
+  it('keeps the viewport band while the viewport still covers the game', () => {
+    const focus = { timeline: 100, turn: 30 };
+    expect(drawnBand(deep, VIEWPORT, BIG, focus)).toEqual(visibleBand(deep, VIEWPORT));
+  });
+
+  it('falls back to the focused board when the game has shrunk under the scroll', () => {
+    const focus = { timeline: 0, turn: 0 };
+    const band = drawnBand(deep, VIEWPORT, { timelines: 1, lastTurn: 2 }, focus);
+    expect(band.fromTimeline).toBeLessThanOrEqual(0);
+    expect(band.toTimeline).toBeGreaterThanOrEqual(0);
+    expect(band.fromTurn).toBeLessThanOrEqual(0);
+    expect(band.toTurn).toBeGreaterThanOrEqual(0);
+    // Still a screenful, not the whole game: the fallback is a band, not a
+    // licence to draw everything.
+    expect(rows(band)).toBe(rows(visibleBand(deep, VIEWPORT)));
+    expect(turns(band)).toBe(turns(visibleBand(deep, VIEWPORT)));
+  });
+
+  it('covers the focused board while nothing has been measured', () => {
+    // A layout that reports no width used to keep the top-left corner and skip
+    // the scroll that would have moved it, so a restored game focused deep in
+    // the multiverse drew an empty region.
+    const focus = { timeline: 100, turn: 30 };
+    const band = drawnBand({ x: 0, y: 0 }, { width: 0, height: 0 }, BIG, focus);
+    expect(band.fromTimeline).toBeLessThanOrEqual(focus.timeline);
+    expect(band.toTimeline).toBeGreaterThanOrEqual(focus.timeline);
+    expect(band.fromTurn).toBeLessThanOrEqual(focus.turn);
+    expect(band.toTurn).toBeGreaterThanOrEqual(focus.turn);
+  });
+});
+
+describe('where the focus effect scrolls to', () => {
+  // The offsets are derived here from where the map says it draws a board,
+  // rather than from the function under test: the board for turn t is at
+  // (t + 1) * SLOT, its row at HEADER + timeline * ROW, and the point of the
+  // scroll is to put that board in the middle of the pane.
+  const centred = (focus: { timeline: number; turn: number }) => ({
+    x: Math.max(0, (focus.turn + 1) * SLOT + SLOT / 2 - VIEWPORT.width / 2),
+    y: Math.max(0, focus.timeline * ROW + ROW / 2 - VIEWPORT.height / 2),
+  });
+
+  it('centres the focused board, and never scrolls past the start of the map', () => {
+    for (const focus of [{ timeline: 0, turn: 0 }, { timeline: 3, turn: 2 }, { timeline: 80, turn: 240 }]) {
+      const { x, y } = focusScroll(focus, VIEWPORT, false);
+      expect({ x, y }).toEqual(centred(focus));
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('jumps rather than glides when motion is reduced, and lands in the same place', () => {
+    // The whole of what the setting does to the map's scroll. Deleting the
+    // argument, or hard-coding `animated: true`, is a player who asked for less
+    // motion watching the map glide anyway; hard-coding `false` takes the glide
+    // away from everyone else. What must NOT change is where it ends up: the
+    // focused board is information, and skipping the scroll would hide it.
+    const focus = { timeline: 6, turn: 11 };
+    const glide = focusScroll(focus, VIEWPORT, false);
+    const jump = focusScroll(focus, VIEWPORT, true);
+    expect(glide.animated).toBe(true);
+    expect(jump.animated).toBe(false);
+    expect({ x: jump.x, y: jump.y }).toEqual({ x: glide.x, y: glide.y });
+    expect({ x: jump.x, y: jump.y }).toEqual(centred(focus));
+  });
+
+  it('uses the same phone-sized guess as the band while nothing is measured', () => {
+    // An unmeasured viewport used to skip the scroll, which left a restored
+    // game focused deep in the multiverse looking at an empty corner of it.
+    const focus = { timeline: 80, turn: 9 };
+    const unmeasured = focusScroll(focus, { width: 0, height: 0 }, false);
+    expect(unmeasured).toEqual(focusScroll(focus, { width: 360, height: 240 }, false));
+    expect(unmeasured.x).toBeGreaterThan(0);
+  });
+});

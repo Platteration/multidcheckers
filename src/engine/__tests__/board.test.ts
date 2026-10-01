@@ -104,7 +104,7 @@ describe('moves', () => {
       'r.......',
       '........',
     ]);
-    const [move] = legalMoves(b, 0);
+    const move = legalMoves(b, 0)[0]!;
     expect(move.path).toEqual([index(3, 2), index(5, 4), index(7, 2)]);
     const after = applyMove(b, move);
     expect(countPieces(after, 1)).toBe(0);
@@ -126,7 +126,7 @@ describe('moves', () => {
     const withRed = placePiece(b, index(5, 0), { player: 0, king: false })!;
     const moves = legalMoves(withRed, 0);
     expect(moves).toHaveLength(1);
-    expect(moves[0].path).toEqual([index(7, 2)]);
+    expect(moves[0]?.path).toEqual([index(7, 2)]);
   });
 
   it('removes and places pieces, crowning on arrival', () => {
@@ -195,7 +195,7 @@ describe('variants', () => {
     expect(legalMoves(b, 0).every((m) => m.captures.length === 0)).toBe(true);
     const back = legalMoves(b, 0, { ...DEFAULT_RULES, backCapture: true });
     expect(back).toHaveLength(1);
-    expect(back[0].captures).toEqual([index(2, 1)]);
-    expect(moveTarget(back[0])).toBe(index(1, 0));
+    expect(back[0]?.captures).toEqual([index(2, 1)]);
+    expect(moveTarget(back[0]!)).toBe(index(1, 0));
   });
 });

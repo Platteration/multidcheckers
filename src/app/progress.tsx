@@ -1,11 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { loadJson, saveJson } from './persist';
+import { KEYS, loadJson, saveJson } from './persist';
+import { cleanProgress } from './validate';
 
-const KEY = 'progress.v1';
+const KEY = KEYS.progress;
 
-interface Progress {
+export interface Progress {
   solved: string[];
 }
+
+export const EMPTY_PROGRESS: Progress = { solved: [] };
 
 interface ProgressApi {
   solved: ReadonlySet<string>;
@@ -21,9 +24,9 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    loadJson<Progress>(KEY).then((p) => {
+    loadJson<unknown>(KEY).then((p) => {
       if (!alive) return;
-      if (p && Array.isArray(p.solved)) setSolved(new Set(p.solved));
+      if (p) setSolved(new Set(cleanProgress(p, EMPTY_PROGRESS).solved));
       setReady(true);
     });
     return () => {

@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { GameState, Player } from '../engine';
-import { loadJson, saveJson } from './persist';
+import { KEYS, loadJson, saveJson } from './persist';
 import type { GameSetup } from './setup';
+import { cleanStats } from './validate';
 
-const KEY = 'stats.v1';
+const KEY = KEYS.stats;
 
 export interface Record_ {
   played: number;
@@ -30,7 +31,8 @@ interface StatsApi {
 const Ctx = createContext<StatsApi>({ stats: EMPTY_STATS, recordGame: () => {} });
 
 export function summarise(history: GameState[], setup: GameSetup, stats: Stats): Stats {
-  const last = history[history.length - 1];
+  // A history always holds the state the game started from.
+  const last = history[history.length - 1]!;
   const key = setup.mode === 'bot' && setup.bot ? `bot${setup.bot.level}` : 'local';
   const human: Player | null = setup.mode === 'bot' && setup.bot ? (setup.bot.player === 0 ? 1 : 0) : null;
   const won = last.status === 'won' && human !== null && last.win?.player === human;
@@ -51,9 +53,9 @@ export function StatsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    loadJson<Stats>(KEY).then((s) => {
+    loadJson<unknown>(KEY).then((s) => {
       if (!alive) return;
-      if (s && typeof s.games === 'number') setStats({ ...EMPTY_STATS, ...s });
+      if (s) setStats(cleanStats(s, EMPTY_STATS));
       setReady(true);
     });
     return () => {

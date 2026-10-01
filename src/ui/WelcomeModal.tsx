@@ -24,6 +24,8 @@ export function WelcomeModal({ visible, pages, onPuzzles, onClose }: Props) {
   const [index, setIndex] = useState(0);
   const page = pages[Math.min(index, pages.length - 1)];
   const last = index >= pages.length - 1;
+  // A walkthrough handed no pages has nothing to show.
+  if (!page) return null;
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>

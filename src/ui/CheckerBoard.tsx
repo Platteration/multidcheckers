@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import { Board, SIZE, index, isPlayable } from '../engine';
 import { Theme, radius } from './theme';
 import { useTheme } from '../app/theme';
+import { squareLabel } from './guards';
 
 export interface Destination {
   square: number;
@@ -47,9 +48,7 @@ export function CheckerBoard({ board, cellSize, selected, destinations, marks, i
       const dest = destinations?.find((d) => d.square === sq);
       const marked = marks?.includes(sq) ?? false;
       const isSelected = selected === sq;
-      const label = `${String.fromCharCode(97 + c)}${r + 1}${
-        piece ? `, ${colors.playerNames[piece.player]} ${piece.king ? 'king' : 'man'}` : ''
-      }${dest ? (dest.capture ? ', jump here' : ', move here') : ''}`;
+      const label = squareLabel(r, c, piece, colors.playerNames, dest);
       cells.push(
         <Pressable
           key={c}

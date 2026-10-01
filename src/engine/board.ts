@@ -71,7 +71,13 @@ export function initialBoard(): Board {
   return { cells };
 }
 
-export function pieceAt(board: Board, at: number): Cell {
+/**
+ * The piece on a square, null for an empty one, and undefined for a number that
+ * is not a square of this board: a travel read out of a game code or a saved
+ * game names its square itself, and nothing has checked it when it is looked
+ * up here.
+ */
+export function pieceAt(board: Board, at: number): Cell | undefined {
   return board.cells[at];
 }
 
@@ -99,12 +105,16 @@ export function crownRow(player: Player): number {
  */
 export interface Move {
   from: number;
+  /**
+   * Never empty: every move the engine builds visits at least one square, and a
+   * move from outside is only played once it has matched one of those.
+   */
   path: number[];
   captures: number[];
 }
 
 export function moveTarget(move: Move): number {
-  return move.path[move.path.length - 1];
+  return move.path[move.path.length - 1]!;
 }
 
 const ALL_DIAGONALS: ReadonlyArray<readonly [number, number]> = [[1, -1], [1, 1], [-1, -1], [-1, 1]];

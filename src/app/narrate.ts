@@ -1,4 +1,18 @@
-import { GameState, colOf, playerToMoveAt, rowOf, timelineLabel } from '../engine';
+import { GameState, Rules, colOf, moveTarget, playerToMoveAt, rowOf, timelineLabel } from '../engine';
+
+/**
+ * The rule variants in force, or '' when none are. A game loaded from someone
+ * else's code brings its own rules with it, and the Settings switches show the
+ * local preference for the next new game, so this is the only place a player
+ * can see which rules they are actually playing under.
+ */
+export function variantsLabel(rules: Rules): string {
+  const on: string[] = [];
+  if (rules.flyingKings) on.push('flying kings');
+  if (rules.backCapture) on.push('backward captures');
+  if (rules.strictPresent) on.push('strict present');
+  return on.join(' · ');
+}
 
 function squareName(sq: number): string {
   return `${String.fromCharCode(97 + colOf(sq))}${rowOf(sq) + 1}`;
@@ -13,7 +27,7 @@ export function narrate(state: GameState, names: readonly [string, string]): str
   const who = names[playerToMoveAt(created.turn - 1)];
   let text: string;
   if (a.type === 'move') {
-    const to = a.move.path[a.move.path.length - 1];
+    const to = moveTarget(a.move);
     text =
       a.move.captures.length > 0
         ? `${who} jumped from ${squareName(a.move.from)} to ${squareName(to)} on ${timelineLabel(a.timeline)}, taking ${a.move.captures.length}.`

@@ -14,10 +14,94 @@ import { MINI_HEIGHT, MINI_WIDTH, MiniBoard } from './MiniBoard';
 import { Theme, spacing } from './theme';
 import { useTheme } from '../app/theme';
 
-const SLOT = MINI_WIDTH + 10;
-const ROW = MINI_HEIGHT + 16;
+// The map's geometry: one slot per turn across, one row per timeline down.
+// Exported so a test can work out which boards a viewport covers.
+export const SLOT = MINI_WIDTH + 10;
+export const ROW = MINI_HEIGHT + 16;
 /** Height of the turn-number header above the first row. */
-const HEADER = 18;
+export const HEADER = 18;
+/** Rows and columns drawn beyond the viewport, so a flick has something to land on. */
+const OVERSCAN = 2;
+
+/**
+ * The part of the map worth drawing: the turns and timelines the viewport
+ * covers, plus a little either side. Every board is a MiniBoard of some seventy
+ * views and the board count grows with moves x timelines, so drawing all of
+ * them is what makes a big multiverse unusable - and what would make an
+ * imported one a denial of service however tightly the import itself is capped.
+ * Both arguments are in the content's own pixels.
+ */
+export interface Band {
+  fromTurn: number;
+  toTurn: number;
+  fromTimeline: number;
+  toTimeline: number;
+}
+
+export function visibleBand(scroll: { x: number; y: number }, viewport: { width: number; height: number }): Band {
+  // Nothing is measured until the first layout; a phone-sized guess draws the
+  // map on that first frame rather than leaving it blank.
+  const width = viewport.width || 360;
+  const height = viewport.height || 240;
+  // The board for turn t sits at (t + 1) * SLOT, one slot right of the labels.
+  return {
+    fromTurn: Math.floor(scroll.x / SLOT) - 1 - OVERSCAN,
+    toTurn: Math.ceil((scroll.x + width) / SLOT) - 1 + OVERSCAN,
+    fromTimeline: Math.floor((scroll.y - HEADER) / ROW) - OVERSCAN,
+    toTimeline: Math.ceil((scroll.y - HEADER + height) / ROW) + OVERSCAN,
+  };
+}
+
+/**
+ * The band actually drawn. `visibleBand` believes the scroll position, and the
+ * scroll position is only ever moved by the platform's own scroll events: a map
+ * that has been scrolled deep and then shows a game with fewer timelines - a new
+ * game, an undo, a loaded code - is pointed at nothing until a scroll event
+ * arrives to clamp it, and before the first layout there has been no scroll
+ * event at all. Both leave the player a blank map that scrolling cannot fix, so
+ * when the scroll position is not believable the band is taken around the
+ * focused board instead, which is always inside the state.
+ */
+export function drawnBand(
+  scroll: { x: number; y: number },
+  viewport: { width: number; height: number },
+  content: { timelines: number; lastTurn: number },
+  focus: BoardRef,
+): Band {
+  const band = visibleBand(scroll, viewport);
+  const measured = viewport.width > 0 && viewport.height > 0;
+  const covers =
+    band.fromTimeline < content.timelines && band.toTimeline >= 0 && band.fromTurn <= content.lastTurn && band.toTurn >= 0;
+  if (measured && covers) return band;
+  const rows = band.toTimeline - band.fromTimeline;
+  const turns = band.toTurn - band.fromTurn;
+  const fromTimeline = focus.timeline - Math.floor(rows / 2);
+  const fromTurn = focus.turn - Math.floor(turns / 2);
+  return { fromTurn, toTurn: fromTurn + turns, fromTimeline, toTimeline: fromTimeline + rows };
+}
+
+/**
+ * Where the focus effect puts the map, and whether it glides there or jumps.
+ * Pure, so that what reduce motion does to it can be pinned without a platform
+ * to scroll: less motion must still land the same board in the middle of the
+ * same viewport - only `animated` changes. Skipping the scroll instead would
+ * leave a restored or jumped-to board off screen, which is information lost
+ * rather than decoration dropped. Both offsets are in the content's own pixels,
+ * and an unmeasured viewport uses the same phone-sized guess `visibleBand` does.
+ */
+export function focusScroll(
+  focus: BoardRef,
+  viewport: { width: number; height: number },
+  reduceMotion: boolean,
+): { x: number; y: number; animated: boolean } {
+  const width = viewport.width || 360;
+  const height = viewport.height || 240;
+  return {
+    x: Math.max(0, (focus.turn + 1) * SLOT + SLOT / 2 - width / 2),
+    y: Math.max(0, focus.timeline * ROW + ROW / 2 - height / 2),
+    animated: !reduceMotion,
+  };
+}
 
 interface Props {
   state: GameState;
@@ -27,6 +111,8 @@ interface Props {
   /** The board the held disc comes from, if any. */
   origin: BoardRef | null;
   onPressBoard: (ref: BoardRef) => void;
+  /** Skip the decorative flight and jump the scroll: the player, or their device, asked for less motion. */
+  reduceMotion?: boolean;
 }
 
 /**
@@ -34,7 +120,7 @@ interface Props {
  * each timeline is a row, starting at the turn where it branched off.
  * `targets` are the boards the currently held piece may travel to.
  */
-export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: Props) {
+export function MultiverseMap({ state, focus, targets, origin, onPressBoard, reduceMotion = false }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const lastTurn = maxTurn(state);
@@ -44,17 +130,35 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
   const horizontal = useRef<ScrollView>(null);
   const vertical = useRef<ScrollView>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [scroll, setScroll] = useState({ x: 0, y: 0 });
+  // One axis at a time, and only once the map has scrolled past a whole slot or
+  // row: the band cannot have changed before that, and this runs on every
+  // scroll event of a pair of scroll views that move independently.
+  const scrolledTo = (axis: 'x' | 'y', to: number) =>
+    setScroll((s) => {
+      if (Math.floor(s[axis] / (axis === 'x' ? SLOT : ROW)) === Math.floor(to / (axis === 'x' ? SLOT : ROW))) return s;
+      return axis === 'x' ? { x: to, y: s.y } : { x: s.x, y: to };
+    });
+  const band = drawnBand(scroll, viewport, { timelines: state.timelines.length, lastTurn }, focus);
+  // The turn numbers along the top are windowed with everything else.
+  const firstLabel = Math.max(0, band.fromTurn);
+  const labelCount = Math.max(0, Math.min(lastTurn, band.toTurn) - firstLabel + 1);
 
   // A time travel: fly a token from the board the piece left to the board it created.
   const flight = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const flightOpacity = useRef(new Animated.Value(0)).current;
-  const travel = state.lastAction?.type === 'travel' && state.lastCreated.length === 2 ? state.lastAction : null;
-  const flightKey = travel ? `${state.timelines.length}-${state.lastCreated[1].timeline}-${state.lastCreated[1].turn}` : null;
+  // A travel creates two boards: the one the piece left, then the one it landed on.
+  const [left, landed] = state.lastCreated;
+  const travel =
+    state.lastAction?.type === 'travel' && state.lastCreated.length === 2 && left && landed
+      ? { from: state.lastAction.from.timeline, left, landed }
+      : null;
+  const flightKey = travel ? `${state.timelines.length}-${travel.landed.timeline}-${travel.landed.turn}` : null;
   useEffect(() => {
-    if (!travel) return;
-    const from = travel.from.timeline;
-    const fromTurn = state.lastCreated[0].turn - 1;
-    const to = state.lastCreated[1];
+    if (!travel || reduceMotion) return;
+    const from = travel.from;
+    const fromTurn = travel.left.turn - 1;
+    const to = travel.landed;
     const start = { x: (fromTurn + 1) * SLOT + MINI_WIDTH / 2, y: HEADER + from * ROW + 8 + MINI_HEIGHT / 2 };
     const end = { x: (to.turn + 1) * SLOT + MINI_WIDTH / 2, y: HEADER + to.timeline * ROW + 8 + MINI_HEIGHT / 2 };
     flight.setValue(start);
@@ -65,16 +169,20 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
     ]).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flightKey]);
-  const travellerColor = travel ? colors.players[playerToMoveAt(state.lastCreated[0].turn - 1)] : colors.travel;
+  const travellerColor = travel ? colors.players[playerToMoveAt(travel.left.turn - 1)] : colors.travel;
 
   // Keep the focused board in view as the player jumps around the multiverse.
+  // Also whenever the game itself changes shape: a multiverse that lost
+  // timelines leaves the scroll position pointing past the end of it, and the
+  // scrollTo is what asks the platform for the scroll event that puts the band
+  // back where the content is. An unmeasured viewport uses the same guess the
+  // band does rather than skipping the scroll, which used to leave a restored
+  // game focused deep in the multiverse looking at an empty corner of it.
   useEffect(() => {
-    if (!viewport.width) return;
-    const x = (focus.turn + 1) * SLOT + SLOT / 2 - viewport.width / 2;
-    horizontal.current?.scrollTo({ x: Math.max(0, x), animated: true });
-    const y = focus.timeline * ROW + ROW / 2 - viewport.height / 2;
-    vertical.current?.scrollTo({ y: Math.max(0, y), animated: true });
-  }, [focus.timeline, focus.turn, viewport]);
+    const { x, y, animated } = focusScroll(focus, viewport, reduceMotion);
+    horizontal.current?.scrollTo({ x, animated });
+    vertical.current?.scrollTo({ y, animated });
+  }, [focus.timeline, focus.turn, viewport, state.timelines.length, lastTurn, reduceMotion]);
 
   return (
     <ScrollView
@@ -83,12 +191,21 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
       showsHorizontalScrollIndicator
       style={styles.outer}
       contentContainerStyle={{ minWidth: '100%' }}
+      scrollEventThrottle={16}
+      onScroll={(e) => scrolledTo('x', e.nativeEvent.contentOffset.x)}
       onLayout={(e) => setViewport({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
     >
-      <ScrollView ref={vertical} nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={{ width, paddingBottom: spacing.md }}>
+      <ScrollView
+        ref={vertical}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator
+        scrollEventThrottle={16}
+        onScroll={(e) => scrolledTo('y', e.nativeEvent.contentOffset.y)}
+        contentContainerStyle={{ width, paddingBottom: spacing.md }}
+      >
         <View style={{ width, position: 'relative' }}>
         <View style={[styles.turnRow, { width }]}>
-          {Array.from({ length: lastTurn + 1 }, (_, turn) => (
+          {Array.from({ length: labelCount }, (_, i) => firstLabel + i).map((turn) => (
             <Text
               key={turn}
               style={[
@@ -112,6 +229,11 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
           );
         })}
         {state.timelines.map((tl) => {
+          // A row outside the viewport keeps its space and nothing else, so the
+          // rows that are drawn sit where the scroll position expects them.
+          if (tl.id < band.fromTimeline || tl.id > band.toTimeline) {
+            return <View key={tl.id} style={[styles.timelineRow, { width }]} />;
+          }
           const labelColor = tl.createdBy === null ? colors.textMuted : colors.playerAccent[tl.createdBy];
           return (
             <View key={tl.id} style={[styles.timelineRow, { width }]}>
@@ -127,6 +249,7 @@ export function MultiverseMap({ state, focus, targets, origin, onPressBoard }: P
               </View>
               {tl.boards.map((board, i) => {
                 const turn = tl.startTurn + i;
+                if (turn < band.fromTurn || turn > band.toTurn) return null;
                 const ref: BoardRef = { timeline: tl.id, turn };
                 const isLatest = turn === latestTurn(tl);
                 const isPending = state.status === 'playing' && isLatest && playerToMoveAt(turn) === state.toMove;

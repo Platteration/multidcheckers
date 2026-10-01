@@ -81,7 +81,8 @@ export interface Skin {
   premium: boolean;
 }
 
-export const SKINS: readonly Skin[] = [
+/** Never empty: the first skin is the one a missing or unknown id falls back to. */
+export const SKINS: readonly [Skin, ...Skin[]] = [
   { id: 'classic', name: 'Walnut', squareLight: '#e7d3ad', squareDark: '#8a5a3c', boardEdge: '#5a3a26', premium: false },
   { id: 'marble', name: 'Marble', squareLight: '#f1f1f4', squareDark: '#7c8290', boardEdge: '#4d515c', premium: false },
   { id: 'forest', name: 'Forest', squareLight: '#eae5c8', squareDark: '#4f7a4a', boardEdge: '#2f4a2c', premium: true },
@@ -101,7 +102,8 @@ export interface PieceSet {
   premium: boolean;
 }
 
-export const PIECE_SETS: readonly PieceSet[] = [
+/** Never empty: the first set is the one a missing or unknown id falls back to. */
+export const PIECE_SETS: readonly [PieceSet, ...PieceSet[]] = [
   {
     id: 'classic',
     name: 'Red & black',
@@ -170,3 +172,29 @@ export function playerColor(theme: Theme, p: Player): string {
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 export const radius = { sm: 8, md: 12, lg: 16, pill: 999 };
+
+/**
+ * The three lines of the header are drawn straight on `background`, with no
+ * panel between, so how readable they are is a property of the palette alone.
+ * They live here, rather than in the screen's own stylesheet, so a test can
+ * measure their contrast: at these sizes none of them is WCAG large text
+ * (which starts at 18.66px bold), so each needs 4.5:1 against the background.
+ * `travel` is 2.82:1 on the light background and is not a colour to write
+ * them in.
+ */
+export interface HeaderTextStyle {
+  color: string;
+  fontSize: number;
+  fontWeight: '400' | '700' | '900';
+  letterSpacing?: number;
+}
+
+export type HeaderTextStyles = Record<'title' | 'subtitle' | 'variants', HeaderTextStyle>;
+
+export function headerTextStyles(colors: Theme): HeaderTextStyles {
+  return {
+    title: { color: colors.text, fontSize: 18, fontWeight: '900', letterSpacing: 0.3 },
+    subtitle: { color: colors.textMuted, fontSize: 11, fontWeight: '400' },
+    variants: { color: colors.text, fontSize: 11, fontWeight: '700' },
+  };
+}

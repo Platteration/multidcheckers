@@ -43,7 +43,7 @@ function withBranch(root: Board[], branch: { startTurn: number; boards: Board[];
   return {
     ...base,
     timelines: [
-      base.timelines[0],
+      ...base.timelines,
       {
         id: 1,
         startTurn: branch.startTurn,
@@ -153,4 +153,14 @@ PUZZLES.push(
 
 export function puzzleById(id: string): Puzzle | undefined {
   return PUZZLES.find((p) => p.id === id);
+}
+
+/**
+ * The puzzle after this one in the list the Puzzles sheet shows: undefined
+ * after the last, which is what hides the result sheet's Next button, and for
+ * an id the list does not hold.
+ */
+export function puzzleAfter(id: string): Puzzle | undefined {
+  const at = PUZZLES.findIndex((p) => p.id === id);
+  return at < 0 ? undefined : PUZZLES[at + 1];
 }

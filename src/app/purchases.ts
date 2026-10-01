@@ -10,7 +10,8 @@
  * RevenueCat), implement `purchase` and `restore` against it, persist the
  * result with `saveEntitlements`, and flip STORE_ENABLED to true.
  */
-import { keys as persistKeys, loadJson, saveJson } from './persist';
+import { KEYS, loadJson, saveJson } from './persist';
+import { cleanEntitlements } from './validate';
 
 export const STORE_ENABLED = false;
 
@@ -22,11 +23,11 @@ export interface Entitlements {
 
 export const NO_ENTITLEMENTS: Entitlements = { supporter: false };
 
-const KEY = 'entitlements.v1';
+const KEY = KEYS.entitlements;
 
 export async function loadEntitlements(): Promise<Entitlements> {
-  const stored = await loadJson<Entitlements>(KEY);
-  return stored ? { ...NO_ENTITLEMENTS, ...stored } : NO_ENTITLEMENTS;
+  const stored = await loadJson<unknown>(KEY);
+  return stored ? cleanEntitlements(stored, NO_ENTITLEMENTS) : NO_ENTITLEMENTS;
 }
 
 export async function saveEntitlements(e: Entitlements): Promise<void> {

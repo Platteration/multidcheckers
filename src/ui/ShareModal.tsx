@@ -2,6 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import React, { useMemo, useState } from 'react';
 import { Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../app/theme';
+import { codeFromUrl } from '../app/links';
 import { Button } from './Modals';
 import { Theme, radius, spacing } from './theme';
 
@@ -9,6 +10,8 @@ interface Props {
   visible: boolean;
   /** The current game as a code, or null when there is nothing to share yet. */
   code: string | null;
+  /** Why this game cannot be sent, when a played game has outgrown a code. */
+  problem?: string | null;
   /** On the web, a link that opens this game directly. */
   link?: string | null;
   onLoad: (code: string) => string | null;
@@ -16,28 +19,11 @@ interface Props {
 }
 
 /** Share the game as a code and load one back: play by message, no server needed. */
-export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
+export function ShareModal({ visible, code, problem, link, onLoad, onClose }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pasted, setPasted] = useState('');
   const [note, setNote] = useState<string | null>(null);
-  const MAX_PASTE_LENGTH = 12000;
-
-  const extractCode = (raw: string): string => {
-    const trimmed = raw.trim();
-    if (!trimmed) return '';
-    const fromQuery = /[?&#]code=([^&#]+)/.exec(trimmed);
-    if (fromQuery) {
-      try {
-        return decodeURIComponent(fromQuery[1]);
-      } catch {
-        return fromQuery[1];
-      }
-    }
-    const afterSlash = trimmed.lastIndexOf('/') >= 0 ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : trimmed;
-    return afterSlash.replace(/[?#].*$/, '');
-  };
-
   const copy = async () => {
     if (!code) return;
     try {
@@ -63,15 +49,10 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
   };
 
   const load = () => {
-    const trimmed = extractCode(pasted);
-    if (!trimmed) return;
-    if (trimmed.length > MAX_PASTE_LENGTH) {
-      setNote('That code is too long to load safely.');
-      return;
-    }
-    const problem = onLoad(trimmed);
-    setNote(problem ?? 'Loaded. Your turn, or theirs.');
-    if (!problem) setPasted('');
+    // A whole link pasted in is as good as the code it carries.
+    const refusal = onLoad(codeFromUrl(pasted.trim()) ?? pasted);
+    setNote(refusal ?? 'Loaded. Your turn, or theirs.');
+    if (!refusal) setPasted('');
   };
 
   return (
@@ -83,11 +64,15 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
             Send this code to a friend. They load it, make their move, and send the code back. Every timeline
             travels with it.
           </Text>
-          <ScrollView style={styles.codeBox} horizontal={false}>
-            <Text selectable style={styles.code}>
-              {code ?? 'Make a move first, then come back here.'}
-            </Text>
-          </ScrollView>
+          {problem ? (
+            <Text style={styles.problem}>{problem}</Text>
+          ) : (
+            <ScrollView style={styles.codeBox} horizontal={false}>
+              <Text selectable style={styles.code}>
+                {code ?? 'Make a move first, then come back here.'}
+              </Text>
+            </ScrollView>
+          )}
           <View style={styles.row}>
             <Button label="Copy" small onPress={copy} disabled={!code} />
             <View style={{ width: spacing.sm }} />
@@ -102,7 +87,6 @@ export function ShareModal({ visible, code, link, onLoad, onClose }: Props) {
             autoCapitalize="none"
             autoCorrect={false}
             multiline
-            maxLength={MAX_PASTE_LENGTH}
             style={styles.input}
             accessibilityLabel="Game code to load"
           />
@@ -124,6 +108,15 @@ const makeStyles = (colors: Theme) =>
     body: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
     codeBox: { maxHeight: 80, marginVertical: spacing.sm, backgroundColor: colors.panelRaised, borderRadius: radius.md, padding: spacing.sm },
     code: { color: colors.text, fontSize: 11, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) },
+    problem: {
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 18,
+      marginVertical: spacing.sm,
+      backgroundColor: colors.panelRaised,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+    },
     row: { flexDirection: 'row' },
     input: {
       marginVertical: spacing.sm,

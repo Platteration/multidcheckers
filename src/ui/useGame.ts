@@ -41,7 +41,10 @@ export type Selection = { kind: 'none' } | { kind: 'piece'; from: PieceRef; move
 
 export interface GameController {
   state: GameState;
-  /** Every state so far, oldest first. Saved so a game survives closing the app. */
+  /**
+   * Every state so far, oldest first. Saved so a game survives closing the app.
+   * Never empty: it starts with the state the game began from.
+   */
   history: GameState[];
   setup: GameSetup;
   /** True when a person, not the bot, is expected to act now. */
@@ -79,10 +82,8 @@ export interface GameController {
 const NONE: Selection = { kind: 'none' };
 
 function firstPending(state: GameState): BoardRef | null {
-  const must = mandatoryTimelines(state);
-  if (must.length) return latestRef(must[0]);
-  const p = pendingTimelines(state);
-  return p.length ? latestRef(p[0]) : null;
+  const tl = mandatoryTimelines(state)[0] ?? pendingTimelines(state)[0];
+  return tl ? latestRef(tl) : null;
 }
 
 export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}, initialSetup: GameSetup = DEFAULT_SETUP): GameController {
@@ -95,12 +96,15 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
   const [selection, setSelection] = useState<Selection>(NONE);
   const [error, setError] = useState<string | null>(null);
 
-  const state = history[history.length - 1];
+  // Every setter below keeps at least one state: the initial value is never
+  // empty, undo stops at the first state, and a load is a decoded or restored
+  // game, which starts with its base position.
+  const state = history[history.length - 1]!;
   const humanTurn = !(setup.bot && state.toMove === setup.bot.player && state.status === 'playing');
   const movesUsed = useMemo(() => {
     if (setup.mode !== 'puzzle' || setup.player === undefined) return 0;
     let n = 0;
-    for (let i = 1; i < history.length; i++) if (history[i - 1].toMove === setup.player) n++;
+    for (let i = 1; i < history.length; i++) if (history[i - 1]!.toMove === setup.player) n++;
     return n;
   }, [history, setup]);
 
@@ -211,11 +215,12 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     // Against a bot, rewind through its replies too, back to your own move.
     if (setup.bot) {
       const bot = setup.bot.player;
-      while (next.length > 1 && (next[next.length - 1].toMove === bot || next[next.length - 1].status !== 'playing')) {
+      while (next.length > 1 && (next[next.length - 1]!.toMove === bot || next[next.length - 1]!.status !== 'playing')) {
         next = next.slice(0, -1);
       }
     }
-    const prev = next[next.length - 1];
+    // At least one state is left: history had two or more, and the loop stops at one.
+    const prev = next[next.length - 1]!;
     setHistory(next);
     setFocus(firstPending(prev) ?? { timeline: 0, turn: 0 });
   }, [history, setup]);
@@ -250,7 +255,7 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     setSelection(NONE);
     setSetup(nextSetup);
     setHistory(nextHistory);
-    const last = nextHistory[nextHistory.length - 1];
+    const last = nextHistory[nextHistory.length - 1]!;
     setFocus(last.win?.board ?? firstPending(last) ?? { timeline: 0, turn: 0 });
   }, []);
 
@@ -269,7 +274,8 @@ export function useGame(initialHistory?: GameState[], rules: Partial<Rules> = {}
     const pending = pendingTimelines(state);
     if (pending.length === 0) return;
     const at = pending.findIndex((tl) => tl.id === focus.timeline);
-    setFocus(latestRef(pending[(at + 1) % pending.length]));
+    // `at` is -1 or an index into `pending`, so the next one wraps inside it.
+    setFocus(latestRef(pending[(at + 1) % pending.length]!));
   }, [state, focus.timeline]);
 
   return {
