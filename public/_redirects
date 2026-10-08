@@ -1,0 +1,13 @@
+# Netlify: the files in the published folder that are not part of the site, and the repository's
+# own files should the checkout ever be published by mistake, answer the not-found page. `404!`
+# rather than `404`: a plain rule is shadowed by a file at the same path, and these are files
+# that can be there. Netlify never serves _headers or _redirects itself; they are listed so the
+# three configurations refuse the same paths. Cloudflare Pages ignores 404 rules: there, publish
+# the folder `npm run build:web` writes, which leaves metadata.json out.
+/_headers        /404.html  404!
+/_redirects      /404.html  404!
+/.htaccess       /404.html  404!
+/metadata.json   /404.html  404!
+/README.md       /404.html  404!
+/.git/*          /404.html  404!
+/deploy/*        /404.html  404!

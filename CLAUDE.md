@@ -81,6 +81,40 @@ confirmation and the one-Modal rule in `src/ui/__tests__/settingsSheet.test.ts`;
 `Object.getOwnPropertyNames(Object.prototype)` through every table via `JSON.parse` and
 must fail if `has` is ever changed to `in`.
 
+## Website
+
+The web build is also a website, built by `scripts/build-web.mjs` (`npm run build:web`) into
+`dist-web/`, which is the whole site and the only thing to publish. The game does not move to a
+server: the host serves files and the headers around them. Everything around the bundle lives in
+`public/`, which `npx expo export` copies to the site root on SDK 57, `.well-known/` included
+(checked on a real export): `index.html` is the page template the exporter reads in place of its
+own (the referrer `<meta>`, the `<noscript>` note, the `#boot-failed` note and `guard.js` before
+the bundle; not the policy, because `expo start --web` serves the template too and the
+development server needs a WebSocket and `innerHTML`, so `build-web.mjs` writes the policy
+`<meta>` into the built page from `_headers`), `guard.js` the safety net, `site.css` the reset Expo's template
+carried inline plus the notes and the not-found page, `404.html`, `robots.txt`,
+`.well-known/security.txt` (renewed yearly: the test fails once `Expires` has passed), and the
+hosts' `_headers`, `_redirects` and `.htaccess`; nginx's copy is `deploy/nginx.conf`. The headers
+are written in all three and the policy in both built pages' `<meta>` too (less `frame-ancestors`),
+and `src/app/__tests__/website.test.ts` reads every copy and requires them equal, path by path,
+including the cache rules and the paths each host refuses; change one and change them all. The
+policy was measured by playing the game in Chromium under it, not copied: `style-src` carries
+the hash of the empty string and no `'unsafe-inline'`, because react-native-web creates an empty
+`<style>` and fills it through `insertRule`; `img-src 'self'` is the favicon (only the full
+Chromium fetches it, which is why the suite launches `channel: 'chromium'`), `media-src 'self'`
+the sounds, `connect-src 'none'` the absence of network code, and Trusted Types are enforced.
+`npm run test:e2e` builds the site for `/multidcheckers/` (`app.config.js` reads `WEB_BASE_URL`
+into `experiments.baseUrl`; `build-web.mjs` also prefixes `404.html` and `.htaccess`) and
+`e2e/run.mjs` plays it under `e2e/serve.mjs`, which answers as Netlify reads `_headers` and
+`_redirects`; it fails on any violation, page or console error, or request outside the sub-path.
+`build-web.mjs` refuses an `--out` inside the checkout other than `dist-web`, `dist` or
+`web-build`, and one that holds the checkout, because the exporter empties its output folder
+first; its tests run it against a stand-in exporter in a temporary folder for that reason. On
+the web the Vibration row is shown off, disabled and says why (`WEB_VIBRATION_HINT`), since
+`feedback.ts` never vibrates there. In a window wider than it is tall the left column is a
+`ScrollView`, whose own style must not lay out children (`justifyContent`, `alignItems`): both
+React Native and react-native-web throw on it in development.
+
 ## Conventions
 
 This repository follows `CONVENTIONS.md`, which is identical in every platteration

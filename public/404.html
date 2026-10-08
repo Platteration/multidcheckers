@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!--
+  The page a host answers for an address that is not part of the site. No script: it is a page
+  and a link back. Its addresses are root-absolute because a host serves it at whatever address
+  was asked for; scripts/build-web.mjs prefixes them when the site lives under a sub-path.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#19232d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f0e6" media="(prefers-color-scheme: light)" />
+    <title>Page not found · 5D Checkers</title>
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body class="not-found">
+    <main class="not-found-card">
+      <h1>That page isn’t here</h1>
+      <p>The address may be mistyped, or the page may have moved. All of 5D Checkers is one page.</p>
+      <p><a class="not-found-button" href="/">Open 5D Checkers</a></p>
+    </main>
+  </body>
+</html>

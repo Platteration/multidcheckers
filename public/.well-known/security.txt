@@ -1,0 +1,5 @@
+# 5D Checkers. Read the policy before reporting: it asks for no details in a public issue.
+Contact: https://github.com/Platteration/multidcheckers/issues
+Expires: 2027-10-08T00:00:00.000Z
+Preferred-Languages: en
+Policy: https://github.com/Platteration/multidcheckers/blob/HEAD/SECURITY.md

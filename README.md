@@ -60,7 +60,8 @@ opponent must defend, or pull a doomed piece out of the present.
   piece sets that also rename the sides; colour-blind markings on pieces; a
   reduce-motion setting that follows the device or overrides it. Settings can
   be reset to their defaults without touching games, record or progress.
-- **Feel.** Haptics and short synthesized sounds, both switchable. Pieces
+- **Feel.** Haptics and short synthesized sounds, both switchable. A
+  browser cannot vibrate, so there the Vibration row says so instead. Pieces
   pop into place when they land.
 - **Your record.** Games played, wins against each bot, time travels made,
   biggest multiverse, longest game, and puzzles solved.
@@ -110,19 +111,124 @@ for EAS Build. The icons in `assets/` are placeholders (nothing in the
 repository generates them), so replace them with real artwork before a store
 release.
 
+### Deploy
+
+The web build is also a website: a static one. The game runs entirely in the
+visitor's browser, as it does on a phone; the host only serves files, and the
+headers and rules that protect them, which this repository writes for it.
+
+```sh
+npm run build:web                                    # the site, in dist-web/, for a domain of its own
+node scripts/build-web.mjs --base /multidcheckers    # the same site, served under /multidcheckers/
+```
+
+**Publish that folder, and only it.** `dist-web/` holds `index.html`,
+`404.html`, `guard.js`, `site.css`, `favicon.ico`, `robots.txt`,
+`.well-known/security.txt`, `_expo/` (the game) and `assets/` (the sounds),
+plus the hosts' configurations, which `npx expo export` copies from
+`public/`: `_headers` and `_redirects` for Netlify and Cloudflare Pages,
+`.htaccess` for Apache. Each host reads its own and serves none of them. For
+nginx, copy `deploy/nginx.conf` into the server's configuration and set
+`server_name`, `root` and the certificate paths. Never point a host at the
+checkout: `.git/` holds the whole history. Should that happen anyway, the
+Apache and nginx rules answer 404 for every dotfile but `/.well-known/`, and
+for `README.md`, `deploy/`, `_headers`, `_redirects` and `metadata.json`;
+`_redirects` does the same on Netlify for the files it could see. (`npm run
+build:web` leaves `metadata.json`, the exporter's manifest for EAS Update,
+out of the site; a plain `npx expo export` does not.)
+
+**Response headers.** The same set is in `public/_headers`,
+`public/.htaccess` and `deploy/nginx.conf`, and
+`src/app/__tests__/website.test.ts` fails when they disagree:
+
+| Header | Value | Why |
+| --- | --- | --- |
+| `Content-Security-Policy` | `default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'` | Only the site's own script, stylesheet, favicon and sounds load, measured by playing the game in Chromium under it. The one hash is the empty string's: react-native-web creates an empty `<style>` element and fills it through the CSSOM, which the policy does not govern, so no `'unsafe-inline'` is needed. `connect-src 'none'` makes any network request fail loudly. Trusted Types are enforced with no policy, because nothing in the game writes HTML from a string. |
+| `X-Frame-Options` | `DENY` | With `frame-ancestors 'none'`: no other site can frame the game (clickjacking). |
+| `X-Content-Type-Options` | `nosniff` | Files are what their type says. |
+| `Referrer-Policy` | `no-referrer` | A game code travels in the address (`?code=`), so no address is ever sent on. |
+| `Permissions-Policy` | everything off but `autoplay` and `clipboard-write` for this site | The sound effects, and Copy in Play by message. Share… uses `web-share`, which is left at its default (this site only). |
+| `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy` | `same-origin` | No other window keeps a handle on this one, and no other site embeds its files. |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | Browsers remember to use HTTPS. |
+| `Cache-Control` | a year, `immutable`, for `_expo/static/` and `assets/`; `no-cache` for everything else | The game and the sounds carry a hash of their contents in their names; every other file keeps its name from one deploy to the next, so it is revalidated on every load. |
+
+**GitHub Pages sends none of these headers.** The built `index.html` and
+`404.html` carry the policy (less `frame-ancestors`, which a `<meta>` cannot
+set) and the referrer policy as `<meta>` tags, so script, style and network
+are held there too; `build-web.mjs` writes the page's from `public/_headers`.
+(The template in `public/` does not carry it, because `npm run web` serves
+the template too and its development server needs a WebSocket and HTML
+written from strings, both of which the policy refuses.) The clickjacking
+protection, HSTS, `nosniff`, the permissions, the cross-origin isolation and
+the cache rules need a host that sets headers: Netlify, Cloudflare Pages,
+Apache or nginx.
+
+**One origin per app.** A GitHub Pages project site lives at
+`platteration.github.io/multidcheckers/` and shares that origin with every
+other app the account publishes there. Browser storage is kept per origin,
+and the web build keeps the game in progress, the settings, the record and
+the puzzle progress in `localStorage`, so script running on any of those
+other apps could read or rewrite them (`src/app/validate.ts` bounds what a
+planted record can do; it cannot make one private). Give the site a domain
+or subdomain of its own, which gives it an origin of its own; the storage
+keys stay prefixed `multidcheckers.` either way. `robots.txt` and
+`/.well-known/security.txt` also only count at the root of an origin.
+
+**Not-found page and safety net.** `404.html` answers any address that is
+not part of the site, in the game's colours and with no script; Netlify,
+Cloudflare Pages and GitHub Pages pick it up by themselves, and the Apache
+and nginx configurations wire it in (and turn folder listings off).
+`build-web.mjs --base` moves its addresses under the sub-path. `guard.js`
+loads before the game: if the game's script fails to load, or throws before
+it has drawn anything, the page says so instead of staying blank, and a
+visitor with JavaScript off reads why the page is empty.
+
+**Launch checklist**, with `SITE` the site's https address:
+
+```sh
+curl -sI http://SITE/ | head -1                      # a 301 to https
+curl -sI https://SITE/ | grep -i -E 'content-security|frame-options|strict-transport|nosniff|referrer|permissions|cross-origin|cache-control'
+curl -sI https://SITE/.git/HEAD | head -1             # 404
+curl -sI https://SITE/README.md | head -1             # 404
+curl -s  https://SITE/_expo/ | grep -c 'isn’t here'   # 1: the not-found page, not a listing
+curl -sI https://SITE/no-such-page | head -1          # 404
+```
+
+Then play a game, open every sheet, share a code and load it from its link,
+and check that the browser console shows no `Content Security Policy`
+lines. The `Expires` date in `security.txt` is 8 October 2027 and needs
+renewing before then (`website.test.ts` fails once it has passed). On GitHub
+Pages, Jekyll skips dot-folders and the Pages upload action can leave hidden
+files out, so check after a deploy that `/.well-known/security.txt` is
+served.
+
 ## Development
 
 ```sh
-npm test                  # unit tests (jest-expo)
+npm test                  # unit tests (jest-expo): the engine, the app, the website's hosting files
 npm run lint              # eslint .
 npm run typecheck         # tsc --noEmit
 npm run test:conventions  # the shared repository conventions (CONVENTIONS.md)
 npm run check             # all of the above: the gate before a push
+npm run test:e2e          # the website: built for /multidcheckers/ and played in Chromium
+npm run test:all          # npm test, then the browser suite
 ```
 
+`npm run test:e2e` builds the site and serves it under `/multidcheckers/`
+with exactly the headers `public/_headers` writes and the 404s
+`public/_redirects` writes (`e2e/serve.mjs`), then plays the game in Chromium
+(`e2e/run.mjs`): the welcome, a move for each side, a time travel, an undo, a
+capture, the sounds, Play by message and the link it makes, the settings, a
+reload, a game against the bot, the replay, the other sheets and a puzzle,
+the not-found page, the repository's own files, and the safety net. It fails
+on any policy violation, page error, console error or request outside the
+sub-path. Playwright is a devDependency; its Chromium comes from
+`npx playwright install chromium`.
+
 `.github/workflows/ci.yml` runs the lint, the typecheck, the tests, the
-conventions test and an Android and web export on every push; a separate job
-runs `npm audit --omit=dev --audit-level=high` against the lockfile.
+conventions test, an Android and web export and the browser suite on every
+push; a separate job runs `npm audit --omit=dev --audit-level=high` against
+the lockfile.
 
 ## Project layout
 
@@ -157,6 +263,20 @@ src/ui/ErrorBoundary.tsx   the fallback for a render that throws; its button cle
 src/ui/__tests__/          contrast checks on the header text (drawn straight on
                            the background), the map's windowing, the error
                            boundary, the board, the share sheet and the guards
+public/                    the website around the game, which the web export
+                           copies beside it: the page template (index.html),
+                           the safety net (guard.js), site.css, 404.html,
+                           robots.txt, .well-known/security.txt, and _headers,
+                           _redirects and .htaccess for the hosts
+deploy/nginx.conf          the same headers and rules for nginx
+app.config.js              the web build's sub-path, when WEB_BASE_URL asks for one
+scripts/build-web.mjs      builds the site into dist-web/ (npm run build:web)
+src/app/__tests__/website.test.ts
+                           the headers, the policy and the refused paths, read
+                           out of every file that writes them
+e2e/serve.mjs, e2e/run.mjs the browser suite's host (Netlify's reading of
+                           _headers and _redirects, under a sub-path) and the
+                           game played under it
 ```
 
 The engine is pure TypeScript with no React dependency, so the rules can be

@@ -622,7 +622,10 @@ const makeStyles = (colors: Theme) =>
   safe: { flex: 1, backgroundColor: colors.background },
   stack: { flex: 1 },
   split: { flex: 1, flexDirection: 'row' },
-  splitLeft: { flex: 1, justifyContent: 'flex-start' },
+  // The left column is a ScrollView in a wide window, and a ScrollView's own style must not lay
+  // out its children (justifyContent, alignItems): React Native and react-native-web both throw
+  // on it in development. flex-start was the default anyway.
+  splitLeft: { flex: 1 },
   splitRight: { flex: 1, paddingTop: spacing.sm },
   header: {
     flexDirection: 'row',

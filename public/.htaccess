@@ -1,0 +1,53 @@
+# 5D Checkers: Apache 2.4 settings for the site (mod_rewrite, mod_headers, mod_mime).
+# `npx expo export` copies this file from public/ into the published folder. Netlify and
+# Cloudflare Pages read _headers and _redirects instead; nginx: deploy/nginx.conf. The three
+# carry the same values; _headers says why each one is what it is.
+
+Options -Indexes
+ServerSignature Off
+AddDefaultCharset utf-8
+# A site under a sub-path: scripts/build-web.mjs --base prefixes these two.
+ErrorDocument 404 /404.html
+ErrorDocument 403 /404.html
+
+<IfModule mod_mime.c>
+  AddType text/javascript .js
+  AddType text/css .css
+  AddType audio/wav .wav
+  AddType image/x-icon .ico
+  AddType text/plain .txt
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # everything over https
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+  # never serve a dotfile (.git above all, and this file), except /.well-known/
+  RewriteRule (^|/)\.(?!well-known/) - [R=404,L]
+  # the files in the folder that are not part of the site, and the repository's own
+  RewriteRule ^(_headers|_redirects|metadata\.json|README\.md|deploy/.*)$ - [R=404,L]
+  # a folder with no page of its own is a 404, not a 403 that hints at a listing
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{REQUEST_FILENAME}/index.html !-f
+  RewriteRule ^ - [R=404,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Permissions-Policy "accelerometer=(), attribution-reporting=(), autoplay=(self), browsing-topics=(), camera=(), clipboard-read=(), clipboard-write=(self), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), join-ad-interest-group=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), private-aggregation=(), publickey-credentials-create=(), publickey-credentials-get=(), run-ad-auction=(), screen-wake-lock=(), serial=(), shared-storage=(), shared-storage-select-url=(), storage-access=(), usb=(), window-management=(), xr-spatial-tracking=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+  # The bundle and the sounds carry a hash of their contents in their names; nothing else does.
+  <If "%{REQUEST_URI} =~ m#/(_expo/static|assets)/#">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+  </If>
+  <Else>
+    Header always set Cache-Control "no-cache"
+  </Else>
+</IfModule>

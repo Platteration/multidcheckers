@@ -31,11 +31,11 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 import React, { useEffect } from 'react';
-import { Modal } from 'react-native';
+import { Modal, Platform, Switch } from 'react-native';
 import TestRenderer, { ReactTestInstance, ReactTestRenderer, act } from 'react-test-renderer';
 import { DEFAULT_SETTINGS, SettingsProvider, useSettings } from '../../app/settings';
 import { Button } from '../Modals';
-import { Choice, Row, Section, SettingsModal } from '../SettingsModal';
+import { Choice, Row, Section, SettingsModal, WEB_VIBRATION_HINT } from '../SettingsModal';
 
 const { __store: store } = jest.requireMock('@react-native-async-storage/async-storage') as { __store: Map<string, string> };
 
@@ -120,6 +120,40 @@ describe('what the sheet offers', () => {
 
     await act(async () => (choice.props.onChange as (v: string) => void)('on'));
     expect(api().settings.reduceMotion).toBe('on');
+    act(() => tree.unmount());
+  });
+});
+
+describe('the Vibration row', () => {
+  // feedback.ts never vibrates on the web, so there the switch would be a control that does
+  // nothing at all. It is drawn off, cannot be pressed, and its hint says why.
+  const vibration = (tree: ReactTestRenderer) => {
+    const row = tree.root.findAllByType(Row).find((node) => node.props.label === 'Vibration');
+    expect(row).toBeDefined();
+    return { row: row!, toggle: row!.findByType(Switch) };
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is a live switch on a device', () => {
+    expect(Platform.OS).not.toBe('web');
+    const { tree } = open();
+    const { row, toggle } = vibration(tree);
+    expect(toggle.props.disabled).toBeFalsy();
+    expect(toggle.props.value).toBe(true);
+    expect(row.props.hint).not.toBe(WEB_VIBRATION_HINT);
+    act(() => tree.unmount());
+  });
+
+  it('says in a browser that it cannot vibrate, rather than offering a switch that does nothing', async () => {
+    jest.replaceProperty(Platform, 'OS', 'web');
+    const { tree, api } = open();
+    await act(async () => {});
+    expect(api().settings.haptics).toBe(true);
+    const { row, toggle } = vibration(tree);
+    expect(toggle.props.disabled).toBe(true);
+    expect(toggle.props.value).toBe(false);
+    expect(row.props.hint).toBe(WEB_VIBRATION_HINT);
     act(() => tree.unmount());
   });
 });

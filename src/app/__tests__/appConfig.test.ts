@@ -66,7 +66,10 @@ const manifestsUnder = (dir: string): string[] => {
   return out;
 };
 
-/** Every source file the app ships: src/ without its tests, plus the entry points. */
+/**
+ * Every source file the app ships: src/ without its tests, plus the entry points. The website
+ * ships one script of its own beside the bundle, the safety net in public/.
+ */
 const appSources = (): string[] => {
   const files: string[] = [];
   const walk = (dir: string) => {
@@ -83,6 +86,7 @@ const appSources = (): string[] => {
   for (const entry of fs.readdirSync(root)) {
     if (/^(App|index)\.[cm]?[jt]sx?$/.test(entry)) files.push(path.join(root, entry));
   }
+  files.push(path.join(root, 'public', 'guard.js'));
   return files;
 };
 

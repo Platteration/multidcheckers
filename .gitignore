@@ -37,6 +37,10 @@ yarn-error.*
 /ios
 /android
 
+# project
+# the website, as scripts/build-web.mjs writes it
+dist-web/
+
 # editors
 .vscode/
 .idea/

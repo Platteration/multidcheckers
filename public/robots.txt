@@ -1,0 +1,3 @@
+# 5D Checkers: a single-page game. Everything public is the one page.
+User-agent: *
+Allow: /

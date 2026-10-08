@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+  The page the web build is served as: `npx expo export` reads this template from public/ in
+  place of Expo's own and adds the favicon link and the bundle's <script defer>. Nothing inline:
+  the site's Content-Security-Policy allows no inline script, and no inline style but the empty
+  <style> element react-native-web fills through the CSSOM. scripts/build-web.mjs writes that
+  policy into the built page as a <meta>, from public/_headers (less frame-ancestors, which a
+  <meta> cannot set), for a host that sends no headers of its own (GitHub Pages). It is not
+  written here because `expo start --web` serves this template too, and the development server
+  needs what the site refuses: a WebSocket for reloading, and HTML written from strings.
+-->
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="Checkers with multiverse time travel: send a piece into the past and play every timeline it makes. Runs in your browser; nothing is uploaded." />
+    <meta name="theme-color" content="#19232d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f0e6" media="(prefers-color-scheme: light)" />
+    <title>%WEB_TITLE%</title>
+    <!-- The safety net, before the game and synchronous, so it is listening when the game loads. -->
+    <script src="guard.js"></script>
+    <link rel="stylesheet" href="site.css" />
+  </head>
+
+  <body>
+    <noscript>
+      <div class="site-note">
+        <strong>5D Checkers needs JavaScript.</strong>
+        The whole game runs in your browser and nothing is uploaded, but the boards are drawn with
+        JavaScript. Turn it on for this site and reload the page.
+      </div>
+    </noscript>
+    <div id="boot-failed" class="site-note" role="alert" hidden>
+      <strong>5D Checkers could not start.</strong>
+      Part of the game did not load, or this browser could not run it. <a href="">Reload the page</a>;
+      if this keeps happening, try a current Chrome, Edge, Firefox or Safari.
+    </div>
+    <div id="root"></div>
+  </body>
+</html>

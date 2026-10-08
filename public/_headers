@@ -1,0 +1,68 @@
+# Response headers for Netlify and Cloudflare Pages, which read this file from the published
+# folder: `npx expo export` copies it there from public/. Apache: public/.htaccess. nginx:
+# deploy/nginx.conf. The three carry the same values. The pages carry the same
+# Content-Security-Policy as a <meta> tag (less frame-ancestors, which a meta tag cannot set) for
+# a host that sends no headers of its own, such as GitHub Pages: 404.html as written, and
+# index.html as scripts/build-web.mjs writes it from the `/*` rule below. website.test.ts in
+# src/app/__tests__ holds every copy equal, and e2e/run.mjs plays the game under this file.
+#
+# Content-Security-Policy, measured in Chromium with the game played end to end:
+#   script-src 'self'   the bundle and guard.js; Expo's single-page export writes no inline script.
+#   style-src 'self' 'sha256-47DEQ...'   site.css, and the empty <style> element react-native-web
+#                       creates and then fills through the CSSOM (insertRule), which CSP does not
+#                       govern. The hash is the empty string's: without it the game draws with no
+#                       styles at all. No 'unsafe-inline'.
+#   img-src 'self'      the favicon.
+#   media-src 'self'    the sound effects, played through <audio>.
+#   connect-src 'none'  the game makes no network request.
+#   frame-ancestors 'none'   nothing is meant to frame the game (clickjacking).
+#   require-trusted-types-for 'script'; trusted-types 'none'   nothing writes HTML from a string.
+# Referrer-Policy is no-referrer because a game code travels in the address (?code=).
+# Permissions-Policy turns everything off but what the game uses: autoplay (the sound effects,
+# which also play on the bot's reply, outside the tap) and clipboard-write (Copy, in Play by
+# message), both for this site alone. web-share is left at its default, this site alone, for
+# Share…: it is not listed because Chromium on Linux does not know the name and warns.
+
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), attribution-reporting=(), autoplay=(self), browsing-topics=(), camera=(), clipboard-read=(), clipboard-write=(self), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), join-ad-interest-group=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), private-aggregation=(), publickey-credentials-create=(), publickey-credentials-get=(), run-ad-auction=(), screen-wake-lock=(), serial=(), shared-storage=(), shared-storage-select-url=(), storage-access=(), usb=(), window-management=(), xr-spatial-tracking=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Cache lifetimes. The bundle and the sounds carry a hash of their contents in their names, so
+# they can be kept a year; everything else keeps its name from one deploy to the next and is
+# revalidated on every load. No path matches two of these rules: both hosts join a header that
+# two matching rules set into one comma-separated value.
+/_expo/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/404.html
+  Cache-Control: no-cache
+
+/guard.js
+  Cache-Control: no-cache
+
+/site.css
+  Cache-Control: no-cache
+
+/favicon.ico
+  Cache-Control: no-cache
+
+/robots.txt
+  Cache-Control: no-cache
+
+/.well-known/*
+  Cache-Control: no-cache

@@ -6,7 +6,11 @@ Please report security issues privately rather than opening a public issue.
 
 Use GitHub's private vulnerability reporting on this repository:
 **Security → Report a vulnerability**. That opens a private advisory visible
-only to the maintainers.
+only to the maintainers. If the button is not there (private reporting is a
+setting the repository has to have switched on), open an issue that says only
+that you have a security report and how to reach you, with no details, and a
+private channel will be arranged. `/.well-known/security.txt` on the website
+points here.
 
 Include what you need to make the problem reproducible: the affected version
 or commit, the steps or input that trigger it, and what you observed. A proof
@@ -19,7 +23,12 @@ guarantee. Reports are read and acted on in order of severity.
 
 In scope: the code in this repository, including anything it does with input
 that comes from outside it (files, share links, imported data, network
-responses, user-supplied text rendered into a page).
+responses, user-supplied text rendered into a page). The website is in scope
+too: the page template and safety net in `public/`, and the hosting rules
+(`public/_headers`, `public/_redirects`, `public/.htaccess`,
+`deploy/nginx.conf`): a header that is missing or wrong on one host, a file
+served that is not part of the site, or a way to run script or load anything
+the Content-Security-Policy should refuse.
 
 Out of scope: vulnerabilities in third-party dependencies that are already
 public and have an upstream fix, findings that require an attacker to already

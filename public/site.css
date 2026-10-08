@@ -1,0 +1,120 @@
+/* The page around the game: what react-native-web needs of its root element (the reset Expo's own
+   template carried inline, which the Content-Security-Policy does not allow), the two notes a
+   visitor reads instead of a blank page (JavaScript off; the game failing to start), and the
+   not-found page. The colours are the game's own palettes (src/ui/theme.ts), dark first: a
+   device that states no preference gets the dark one, as in the game. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #19232d;
+  color: #f7f1e5;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+/* The game scrolls inside its own views, never the page. */
+body {
+  overflow: hidden;
+}
+#root {
+  display: flex;
+  height: 100%;
+  flex: 1;
+}
+
+.site-note {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 10;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 16px 20px;
+  border: 1px solid #526674;
+  border-radius: 14px;
+  background: #24323e;
+  color: #f7f1e5;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.site-note strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 17px;
+}
+.site-note[hidden] {
+  display: none;
+}
+
+body.not-found {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.not-found-card {
+  max-width: 30rem;
+  margin: 16px;
+  padding: 24px;
+  border: 1px solid #526674;
+  border-radius: 14px;
+  background: #24323e;
+  line-height: 1.5;
+}
+.not-found-card h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+.not-found-card p {
+  margin: 0 0 16px;
+  color: #b7c2c7;
+}
+.not-found-card p:last-child {
+  margin-bottom: 0;
+}
+
+.site-note a,
+.not-found-card a {
+  color: #88c9c0;
+  font-weight: 700;
+}
+a.not-found-button {
+  display: inline-block;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #88c9c0;
+  color: #19232d;
+  text-decoration: none;
+}
+a:focus-visible {
+  outline: 2px solid #fffaf0;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: light) {
+  html,
+  body {
+    background: #f5f0e6;
+    color: #24333e;
+  }
+  .site-note,
+  .not-found-card {
+    border-color: #b7b2a4;
+    background: #fffaf0;
+    color: #24333e;
+  }
+  .not-found-card p {
+    color: #5b6b72;
+  }
+  .site-note a,
+  .not-found-card a {
+    color: #296f69;
+  }
+  a.not-found-button {
+    background: #296f69;
+    color: #fffaf0;
+  }
+  a:focus-visible {
+    outline-color: #24333e;
+  }
+}
