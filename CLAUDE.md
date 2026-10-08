@@ -93,11 +93,21 @@ the bundle; not the policy, because `expo start --web` serves the template too a
 development server needs a WebSocket and `innerHTML`, so `build-web.mjs` writes the policy
 `<meta>` into the built page from `_headers`), `guard.js` the safety net, `site.css` the reset Expo's template
 carried inline plus the notes and the not-found page, `404.html`, `robots.txt`,
-`.well-known/security.txt` (renewed yearly: the test fails once `Expires` has passed), and the
-hosts' `_headers`, `_redirects` and `.htaccess`; nginx's copy is `deploy/nginx.conf`. The headers
-are written in all three and the policy in both built pages' `<meta>` too (less `frame-ancestors`),
-and `src/app/__tests__/website.test.ts` reads every copy and requires them equal, path by path,
-including the cache rules and the paths each host refuses; change one and change them all. The
+`.well-known/security.txt` (renewed yearly: the test fails once `Expires` has passed), the
+hosts' `_headers`, `_redirects` and `.htaccess`, and an empty `.nojekyll` (a GitHub Pages branch
+deploy otherwise runs Jekyll, which drops `_expo/`, the whole game); nginx's copy is
+`deploy/nginx.conf`. The headers are written in all three and the policy in both built pages'
+`<meta>` too (less `frame-ancestors`), and `src/app/__tests__/website.test.ts` reads every copy
+and requires them equal, path by path, including the cache rules and the paths each host refuses;
+change one and change them all. It reads `.htaccess` and `nginx.conf` whole, and a line it does
+not know fails it: reading only the parts it compared let a condition after a header's value, a
+`RewriteEngine Off`, a RewriteCond in front of a refusal and headers moved into nginx's port-80
+server all pass. `e2e/hosts.mjs` (the last part of `npm run test:e2e`) then runs both files in a
+real nginx and a real Apache against the built site, which is what catches `http2 on;` (unknown
+to the nginx 1.24 Ubuntu 24.04 ships: `listen … http2` instead) and `<IfModule>` wrappers (on a
+stock Apache, with the modules off, they served `.git/` with no headers and logged nothing;
+unwrapped, a missing module is a 500 and a log line); it skips where the servers are missing
+unless `CI` is set. The
 policy was measured by playing the game in Chromium under it, not copied: `style-src` carries
 the hash of the empty string and no `'unsafe-inline'`, because react-native-web creates an empty
 `<style>` and fills it through `insertRule`; `img-src 'self'` is the favicon (only the full
@@ -107,6 +117,13 @@ the sounds, `connect-src 'none'` the absence of network code, and Trusted Types 
 into `experiments.baseUrl`; `build-web.mjs` also prefixes `404.html` and `.htaccess`) and
 `e2e/run.mjs` plays it under `e2e/serve.mjs`, which answers as Netlify reads `_headers` and
 `_redirects`; it fails on any violation, page or console error, or request outside the sub-path.
+Share… links write the code in the fragment (`webLinkFor`, `#code=`): in the query a game past
+about eighty actions outgrew the 8 KB request line Apache and nginx take (414) and put the game in
+the host's log. `?code=` still loads. A fragment link to the page already open loads nothing
+again and raises no `url` event on react-native-web, so `GameScreen` also listens for
+`hashchange` (`onWebHashChange`). The browser suite takes Chromium's `navigator.share` away
+(macOS and Windows have it, Linux does not) and hands the page its own, so it runs the same
+everywhere.
 `build-web.mjs` refuses an `--out` inside the checkout other than `dist-web`, `dist` or
 `web-build`, and one that holds the checkout, because the exporter empties its output folder
 first; its tests run it against a stand-in exporter in a temporary folder for that reason. On

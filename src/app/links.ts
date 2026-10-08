@@ -1,6 +1,8 @@
 /**
  * Deep links carrying a game code: `<scheme>://load?code=…` on a device,
- * `https://…/?code=…` on the web. The code itself is validated by decodeGame.
+ * `https://…/#code=…` on the web, and `https://…/?code=…` from the links the
+ * web build wrote before the code moved into the fragment, which still load.
+ * The code itself is validated by decodeGame.
  */
 
 /**
@@ -63,10 +65,39 @@ export function takeLaunchUrl(read: () => Promise<string | null>): Promise<strin
   return read();
 }
 
-/** A shareable link for the web build, or null when not running on the web. */
+/**
+ * A shareable link for the web build, or null when not running on the web.
+ *
+ * The code goes in the fragment, which a browser never sends to the host. In
+ * the query it was part of the request line, at about a hundred bytes an
+ * action, and a game past about eighty actions outgrew the 8 KB line that
+ * Apache and nginx accept by default: the link answered "414 Request-URI Too
+ * Large", the server's own page rather than the game. It also put the whole
+ * game in the host's access log, which made the About card's "a game code goes
+ * only where you send it" untrue. codeFromUrl reads both shapes, so a link sent
+ * before this one still loads.
+ */
 export function webLinkFor(code: string): string | null {
   if (typeof window === 'undefined' || !window.location?.origin || window.location.origin.startsWith('null')) return null;
-  return `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(code)}`;
+  return `${window.location.origin}${window.location.pathname}#code=${encodeURIComponent(code)}`;
+}
+
+/**
+ * Calls `onUrl` with the page's address whenever its fragment changes, on the
+ * web, and does nothing anywhere else; the answer removes the listener.
+ *
+ * A link to the page that is already open differs from it in the fragment
+ * alone, so following it, or pasting it into the same tab, does not load the
+ * page again: getInitialURL keeps answering the address the page loaded with,
+ * and react-native-web's Linking never reports a `url` event. Without this the
+ * game would simply not hear the link. clearCodeFromUrl's replaceState fires no
+ * `hashchange`, so taking the code out again is not heard as a second link.
+ */
+export function onWebHashChange(onUrl: (url: string) => void): () => void {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function' || typeof window.location?.href !== 'string') return () => {};
+  const listener = () => onUrl(window.location.href);
+  window.addEventListener('hashchange', listener);
+  return () => window.removeEventListener('hashchange', listener);
 }
 
 /**

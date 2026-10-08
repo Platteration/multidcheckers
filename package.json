@@ -42,7 +42,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:conventions": "node --test test/conventions.mjs",
-    "test:e2e": "node scripts/build-web.mjs --base /multidcheckers --out dist-web && node e2e/run.mjs",
+    "test:e2e": "node scripts/build-web.mjs --base /multidcheckers --out dist-web && node e2e/run.mjs && node e2e/hosts.mjs",
     "test:all": "npm test && npm run test:e2e",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:conventions"
   },

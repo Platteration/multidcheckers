@@ -17,7 +17,9 @@
 #   connect-src 'none'  the game makes no network request.
 #   frame-ancestors 'none'   nothing is meant to frame the game (clickjacking).
 #   require-trusted-types-for 'script'; trusted-types 'none'   nothing writes HTML from a string.
-# Referrer-Policy is no-referrer because a game code travels in the address (?code=).
+# Referrer-Policy is no-referrer because a game code travels in the address: in the fragment of the
+# links the game writes (#code=), which no browser sends on anyway, and in the query of the links
+# it wrote before (?code=), which still load.
 # Permissions-Policy turns everything off but what the game uses: autoplay (the sound effects,
 # which also play on the bot's reply, outside the tap) and clipboard-write (Copy, in Play by
 # message), both for this site alone. web-share is left at its default, this site alone, for
@@ -36,7 +38,12 @@
 # Cache lifetimes. The bundle and the sounds carry a hash of their contents in their names, so
 # they can be kept a year; everything else keeps its name from one deploy to the next and is
 # revalidated on every load. No path matches two of these rules: both hosts join a header that
-# two matching rules set into one comma-separated value.
+# two matching rules set into one comma-separated value. Netlify applies a rule to whatever
+# answers its path, the not-found page included (it has no rule by status; Cloudflare Pages is
+# taken to do the same), so a name under /_expo/static/ or /assets/ that the live deploy does not
+# hold is a 404 a browser may keep for a year. Deploys are atomic and the page that names those
+# files is revalidated every load, so only a tab left open across a deploy can ask for one; nginx
+# and Apache answer such a 404 with no-cache.
 /_expo/static/*
   Cache-Control: public, max-age=31536000, immutable
 

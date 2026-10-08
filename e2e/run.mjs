@@ -6,10 +6,12 @@
 // securitypolicyviolation events and the console's reports), any page error, any console error,
 // and any request outside the site's sub-path, and it plays the game: the welcome, a move for each
 // side, a time travel that branches a timeline, an undo, a capture, the sounds, Play by message
-// (copy, then the link it makes), the settings, a reload that keeps the game, a game against the
-// bot, the replay, the other sheets and a puzzle. Then the not-found page, the repository's own
-// files, and the safety net: a bundle that does not load, a bundle that throws, and no JavaScript
-// at all.
+// (copy, the share sheet and the link it is handed, that link followed in the tab already showing
+// the game, a link in the shape sent before, and a 90-action game's link, longer than any host
+// takes in a request line), the settings, a reload that keeps the game, a game against the bot,
+// the replay, the other sheets and a puzzle. Then the not-found page, the repository's own files,
+// and the safety net: a bundle that does not load, a bundle that throws, and no JavaScript at all.
+// e2e/hosts.mjs then serves the same site from a real nginx and a real Apache.
 //
 //   npm run test:e2e        builds the site, then runs this
 //   node e2e/run.mjs        runs this against the dist-web/ already built
@@ -19,7 +21,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { headersFor, parseHeaders, serveSite } from './serve.mjs';
+import { REQUEST_LINE_LIMIT, headersFor, parseHeaders, serveSite } from './serve.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(root, 'package.json'));
@@ -166,9 +168,17 @@ async function step(name, fn) {
 
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, permissions: ['clipboard-write'] });
+  // Chromium has a share sheet (navigator.share) on macOS and Windows and none on Linux. It is taken
+  // away here, so Share… falls back to the clipboard on every system this runs on, and a step below
+  // hands the page a share sheet of its own to see what Share… gives one.
+  await context.addInitScript(() => {
+    delete Navigator.prototype.share;
+    delete Navigator.prototype.canShare;
+  });
   const expected = [];
   const page = await watched(context, 'game', expected);
   let code = '';
+  let link = '';
 
   await step('the page loads under the policy, and the welcome opens', async () => {
     const response = await page.goto(site.url);
@@ -231,7 +241,8 @@ try {
   });
 
   await step('Share… with no share sheet in this browser copies instead, and says so', async () => {
-    // Chromium on Linux has no navigator.share; the button must still do something visible.
+    // A browser with no navigator.share (the context took it away); the button must still do
+    // something visible.
     assert.equal(await page.evaluate(() => 'share' in navigator), false);
     await press(page, 'Menu');
     await press(page, 'Play by message');
@@ -241,6 +252,28 @@ try {
     await page.waitForFunction(() => window.__e2eClipboard.length === 2);
     assert.deepEqual(await page.evaluate(() => window.__e2eClipboard), ['written', 'written']);
     await page.getByText('Copied. Paste it into any message.').waitFor();
+    await press(page, 'Close');
+  });
+
+  await step('Share… hands a share sheet the game as a link, with the code where no host sees it', async () => {
+    await page.evaluate(() => {
+      window.__e2eShared = [];
+      navigator.share = (data) => {
+        window.__e2eShared.push(data.text);
+        return Promise.resolve();
+      };
+    });
+    await press(page, 'Menu');
+    await press(page, 'Play by message');
+    await press(page, 'Share…');
+    await page.waitForFunction(() => window.__e2eShared.length === 1);
+    const [text] = await page.evaluate(() => window.__e2eShared);
+    await page.evaluate(() => delete navigator.share);
+    link = text.split('\n')[0];
+    assert.equal(text, `${link}\n\n(or paste this code into the app)\n${code}`);
+    // In the fragment: a browser never sends it, so the host neither logs the game nor has to
+    // take it in a request line.
+    assert.equal(link, `${site.url}#code=${encodeURIComponent(code)}`);
     await press(page, 'Close');
   });
 
@@ -275,7 +308,7 @@ try {
     assert.deepEqual(await pieces(page), before);
   });
 
-  await step('a link carrying a game code loads it, and leaves the address clean', async () => {
+  await step('a link in the shape the game wrote before, ?code=, still loads, and leaves the address clean', async () => {
     await page.goto(`${site.url}?code=${encodeURIComponent(code)}`);
     await page.getByText('Load the game from this link?').waitFor();
     await press(page, 'Yes, load it');
@@ -284,6 +317,70 @@ try {
     // The code was made after the capture: Red to move, the jumped man gone.
     await page.getByText('Red to move · 1 board waiting').waitFor();
     await button(page, 'b3, Black man').waitFor();
+  });
+
+  await step('the link Share… made, followed in the tab already showing the game, is heard and loads', async () => {
+    // Undo Black's capture, so the game the link brings back is not the one on the screen.
+    await press(page, 'Undo');
+    await button(page, 'c4, Red man').waitFor();
+    // Only the fragment differs from the address on show, so the browser loads nothing again and
+    // the game hears the link through hashchange or not at all.
+    await page.goto(link);
+    await page.getByText('Load the game from this link?').waitFor();
+    await press(page, 'Yes, load it');
+    await button(page, 'b3, Black man').waitFor();
+    await button(page, 'c4').waitFor();
+    await page.getByText('Red to move · 1 board waiting').waitFor();
+    await page.waitForFunction(() => location.hash === '');
+    assert.equal(new URL(page.url()).pathname, `${BASE}/`);
+  });
+
+  await step('a 90-action game travels as a link too, longer than any host takes in a request line', async () => {
+    const long = fs.readFileSync(path.join(root, 'e2e', 'long-game.txt'), 'utf8').trim();
+    // In the query, as links were written before, no host would get as far as the game.
+    assert.equal((await page.request.get(`${site.url}?code=${encodeURIComponent(long)}`)).status(), 414);
+    const sending = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const s = await watched(sending, 'long game, sent');
+    await s.addInitScript(() => {
+      window.__e2eShared = [];
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: (data) => {
+          window.__e2eShared.push(data.text);
+          return Promise.resolve();
+        },
+      });
+    });
+    await s.goto(site.url);
+    await press(s, 'Skip');
+    await press(s, 'Menu');
+    await press(s, 'Play by message');
+    await s.getByLabel('Game code to load').fill(long);
+    await press(s, 'Load this game');
+    // A code that loads closes the sheet on the game it holds.
+    await button(s, 'Load this game').waitFor({ state: 'detached' });
+    await s.getByText('Timeline 1 · turn 90 · now').waitFor();
+    await press(s, 'Menu');
+    await press(s, 'Play by message');
+    await press(s, 'Share…');
+    await s.waitForFunction(() => window.__e2eShared.length === 1);
+    const longLink = (await s.evaluate(() => window.__e2eShared[0])).split('\n')[0];
+    assert.ok(longLink.startsWith(`${site.url}#code=`), longLink.slice(0, 120));
+    assert.ok(longLink.length > REQUEST_LINE_LIMIT, `the link is ${longLink.length} characters`);
+    await press(s, 'Close');
+    const sent = await pieces(s);
+    const status = await s.getByText(/ to move · \d+ boards? waiting$/).innerText();
+
+    const receiving = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const r = await watched(receiving, 'long game, received');
+    const response = await r.goto(longLink);
+    assert.equal(response.status(), 200);
+    await press(r, 'Skip');
+    await r.getByText(status, { exact: true }).waitFor();
+    assert.deepEqual(await pieces(r), sent);
+    await r.waitForFunction(() => location.hash === '');
+    await sending.close();
+    await receiving.close();
   });
 
   await step('the bot answers a move', async () => {
@@ -347,7 +444,7 @@ try {
   });
 
   await step("the repository's own files, and the configurations, are not part of the site", async () => {
-    for (const file of ['README.md', '.git/config', '.git/HEAD', 'deploy/nginx.conf', '_headers', '_redirects', '.htaccess', 'metadata.json', 'package.json', 'app.json', '_expo/', 'assets/']) {
+    for (const file of ['README.md', '.git/config', '.git/HEAD', 'deploy/nginx.conf', '_headers', '_redirects', '.htaccess', '.nojekyll', 'metadata.json', 'package.json', 'app.json', '_expo/', 'assets/']) {
       const response = await page.request.get(`${site.url}${file}`);
       assert.equal(response.status(), 404, `${file} answered ${response.status()}`);
       assert.ok((await response.text()).includes(NOT_FOUND), `${file} answered the not-found page`);
@@ -356,6 +453,11 @@ try {
       const response = await page.request.get(`${site.url}${file}`);
       assert.equal(response.status(), 200, `${file || '/'} answered ${response.status()}`);
     }
+    // A name under /_expo/static/ that the site does not hold: the not-found page, under the year
+    // the path's rule gives it, as Netlify answers (serve.mjs says why; nginx and Apache revalidate).
+    const missing = await page.request.get(`${site.url}_expo/static/js/web/index-ffffffffffffffffffffffffffffffff.js`);
+    assert.equal(missing.status(), 404);
+    assert.equal(missing.headers()['cache-control'], 'public, max-age=31536000, immutable');
   });
 
   await step('every path the game loaded answers every header _headers gives it, HSTS included', async () => {

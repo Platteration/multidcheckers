@@ -3,8 +3,8 @@
 //   node scripts/build-web.mjs [--base /multidcheckers] [--out dist-web]
 //
 // It runs `expo export --platform web`, which copies public/ (the page template, the safety net,
-// the not-found page, robots.txt, security.txt and the three hosts' configurations) beside the
-// bundle, and then:
+// the not-found page, robots.txt, security.txt, the three hosts' configurations and .nojekyll, which
+// keeps a GitHub Pages branch deploy from running Jekyll over the site) beside the bundle, and then:
 //   - with --base, serves the site under that path: the bundle's addresses through app.config.js
 //     (WEB_BASE_URL), and the root-absolute addresses of 404.html and .htaccess's ErrorDocument
 //     lines here, since the exporter copies those files as they are;
@@ -32,7 +32,7 @@ export const BASE = /^(\/(?!\.\.?(?:\/|$))[A-Za-z0-9._~-]+)+$/;
 export const OUT_FOLDERS = ['dist-web', 'dist', 'web-build'];
 
 /** Every file the site is made of besides the bundle, the sounds and the favicon. */
-export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'robots.txt', '.well-known/security.txt', '_headers', '_redirects', '.htaccess'];
+export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'robots.txt', '.well-known/security.txt', '_headers', '_redirects', '.htaccess', '.nojekyll'];
 
 /** The Content-Security-Policy the `/*` rule of a _headers file gives every path. */
 export function headerPolicy(headersText) {

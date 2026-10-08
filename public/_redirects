@@ -1,12 +1,17 @@
-# Netlify: the files in the published folder that are not part of the site, and the repository's
-# own files should the checkout ever be published by mistake, answer the not-found page. `404!`
-# rather than `404`: a plain rule is shadowed by a file at the same path, and these are files
-# that can be there. Netlify never serves _headers or _redirects itself; they are listed so the
-# three configurations refuse the same paths. Cloudflare Pages ignores 404 rules: there, publish
-# the folder `npm run build:web` writes, which leaves metadata.json out.
+# Netlify: the files in the published folder that are not part of the site answer the not-found
+# page. `404!` rather than `404`: a plain rule is shadowed by a file at the same path, and these
+# are files that can be there. Netlify never serves _headers or _redirects itself; they are listed
+# so the three configurations refuse the same paths, and so are README.md, .git/ and deploy/, which
+# a folder filled by hand could hold. This file guards the folder `npm run build:web` writes and
+# nothing else: in a checkout it sits in public/, where no host reads it, so a host pointed at the
+# checkout serves every file in it (only deploy/nginx.conf, which lives in the server's own
+# configuration, refuses them there). Cloudflare Pages ignores 404 rules (publish the folder the
+# build writes there, which leaves metadata.json out) and serves .htaccess and .nojekyll as files;
+# GitHub Pages serves all four configuration files. Nothing in any of them is secret.
 /_headers        /404.html  404!
 /_redirects      /404.html  404!
 /.htaccess       /404.html  404!
+/.nojekyll       /404.html  404!
 /metadata.json   /404.html  404!
 /README.md       /404.html  404!
 /.git/*          /404.html  404!

@@ -76,6 +76,14 @@ export function headersFor(rules, p) {
 }
 
 /**
+ * The longest request line Apache accepts by default (LimitRequestLine 8190); nginx's default
+ * 8 KB header buffer refuses about the same, and both answer 414 past it with a page of their
+ * own (e2e/hosts.mjs measures both). Node would take twice as much, which is how a link with
+ * the whole game in its query passed here and failed on both.
+ */
+export const REQUEST_LINE_LIMIT = 8190;
+
+/**
  * Serves `root` at http://127.0.0.1:<port><base>/. Every request is recorded; one outside the
  * base lands in `outside`, and a path two header rules both set a header for in `twice`. With
  * `headers: false` it sends none of _headers, as GitHub Pages sends none.
@@ -96,11 +104,19 @@ export function serveSite({ root, base, headers: sendHeaders = true }) {
     res.statusCode = status;
     res.end(fs.readFileSync(file));
   };
+  // A 404 carries the headers of the path that was asked for, as Netlify sends them: it applies a
+  // path's rules to whatever answers it, and has no rule by status. So a name under /_expo/static/
+  // that is not in the site is a 404 marked immutable for a year; nginx and Apache answer it with
+  // the not-found page's own no-cache (public/_headers, "Cache lifetimes").
   const notFound = (res, sitePath) => send(res, sitePath, 404, path.join(site, '404.html'));
 
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
     requests.push(pathname);
+    if (`${req.method} ${req.url} HTTP/${req.httpVersion}`.length > REQUEST_LINE_LIMIT) {
+      res.writeHead(414, { 'Content-Type': 'text/plain' }).end('Request-URI Too Long');
+      return;
+    }
     if (pathname === base) {
       res.writeHead(301, { Location: `${base}/` }).end();
       return;

@@ -2,7 +2,12 @@
  * Links carrying a game code. A code left in the web address bar is re-imported
  * on every reload, which throws away whatever has been played since.
  */
-import { codeFromUrl, urlWithoutCode } from '../../app/links';
+import fs from 'fs';
+import path from 'path';
+import { codeFromUrl, onWebHashChange, urlWithoutCode, webLinkFor } from '../../app/links';
+import { decodeGame, encodeGame } from '../../app/share';
+import { onWebPage } from '../../app/__tests__/webPage';
+import { GameState, applyAction, chooseAction, newGame } from '../index';
 
 describe('codeFromUrl', () => {
   it('finds the code in every shape of link', () => {
@@ -138,5 +143,100 @@ describe('takeLaunchUrl', () => {
     const failing = fresh();
     await expect(failing.takeLaunchUrl(() => Promise.reject(new Error('no native module')))).rejects.toThrow('no native module');
     await expect(failing.takeLaunchUrl(async () => 'multidcheckers://?code=5DCK.late')).resolves.toBeNull();
+  });
+});
+
+/**
+ * e2e/long-game.txt, the code the browser suite opens as a link: a game of 90
+ * actions between two seeded bots of the middle level, which is how long a
+ * code a game reaches long before it ends (seeded bot games ran 180 to 400
+ * actions). Regenerated here so the file cannot drift from the engine.
+ */
+function ninetyActionGame(): GameState[] {
+  let seed = 1;
+  const rng = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const history: GameState[] = [newGame()];
+  while (history.length <= 90) {
+    const state = history[history.length - 1]!;
+    const action = chooseAction(state, 2, rng);
+    if (!action) throw new Error('the seeded game ended before 90 actions');
+    history.push(applyAction(state, action));
+  }
+  return history;
+}
+
+/**
+ * The longest request line Apache accepts by default (LimitRequestLine);
+ * nginx's default 8 KB header buffer refuses about the same. Past it both
+ * answer 414 with their own error page (e2e/hosts.mjs measures both).
+ */
+const REQUEST_LINE_LIMIT = 8190;
+
+describe('webLinkFor', () => {
+  let page: ReturnType<typeof onWebPage> | null = null;
+  afterEach(() => {
+    page?.restore();
+    page = null;
+  });
+
+  it('carries the code in the fragment, which a browser never sends to the host', () => {
+    page = onWebPage('https://example.com/multidcheckers/?x=1#y');
+    const link = webLinkFor('5DCK.a+b');
+    expect(link).toBe('https://example.com/multidcheckers/#code=5DCK.a%2Bb');
+    // What the host is asked for: the path, and nothing of the game.
+    const url = new URL(link!);
+    expect(url.pathname + url.search).toBe('/multidcheckers/');
+    // And the pair that reads and clears it handles it.
+    expect(codeFromUrl(link)).toBe('5DCK.a+b');
+    expect(urlWithoutCode(link!)).toBe('/multidcheckers/');
+  });
+
+  it('is null away from a web page', () => {
+    expect(webLinkFor('5DCK.abc')).toBeNull();
+  });
+
+  it('keeps a long game out of the request line: the 90-action code the browser suite opens', () => {
+    const code = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'e2e', 'long-game.txt'), 'utf8').trim();
+    const history = ninetyActionGame();
+    // Paste this into e2e/long-game.txt if the engine has changed the game.
+    expect(code).toBe(encodeGame(history, { mode: 'local' }));
+    expect(decodeGame(code).history).toHaveLength(91);
+    page = onWebPage('https://platteration.github.io/multidcheckers/');
+    const link = webLinkFor(code)!;
+    // Far past what a host takes in a request line, so in the query it was a 414 ...
+    expect(link.length).toBeGreaterThan(REQUEST_LINE_LIMIT);
+    // ... and in the fragment the host is asked for the page alone.
+    const url = new URL(link);
+    expect(`GET ${url.pathname}${url.search} HTTP/1.1`.length).toBeLessThan(100);
+    expect(codeFromUrl(link)).toBe(code);
+  });
+});
+
+describe('onWebHashChange', () => {
+  it('hears a link to the open page, which changes the fragment alone, until it is removed', () => {
+    const page = onWebPage('https://example.com/multidcheckers/');
+    try {
+      const heard: string[] = [];
+      const remove = onWebHashChange((url) => heard.push(url));
+      page.follow('https://example.com/multidcheckers/#code=5DCK.abc');
+      expect(heard).toEqual(['https://example.com/multidcheckers/#code=5DCK.abc']);
+      remove();
+      expect(page.listeners.size).toBe(0);
+      page.follow('https://example.com/multidcheckers/#code=5DCK.def');
+      expect(heard).toHaveLength(1);
+    } finally {
+      page.restore();
+    }
+  });
+
+  it('listens to nothing away from a web page', () => {
+    const heard: string[] = [];
+    const remove = onWebHashChange((url) => heard.push(url));
+    expect(typeof remove).toBe('function');
+    remove();
+    expect(heard).toEqual([]);
   });
 });

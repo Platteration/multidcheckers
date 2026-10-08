@@ -19,6 +19,7 @@ import type { ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { KEYS } from '../../app/persist';
 import { SavedGame, actionsOf } from '../../app/setup';
 import { encodeGame } from '../../app/share';
+import { onWebPage } from '../../app/__tests__/webPage';
 import { Action, GameState, Move, applyAction, index, newGame } from '../../engine';
 
 // (babel-jest lifts every jest.mock above these imports.)
@@ -98,7 +99,7 @@ const FAILED = 'Something went wrong';
  * what one case's run remembered is not the next case's. React, the renderer,
  * the app and the mocked storage and Linking all come from that one registry.
  */
-async function launch(saved: GameState[] | null) {
+async function launch(saved: GameState[] | null, launchUrl: string | null = LINK) {
   // (jest.isolateModules is not enough here: React Native's components come
   // out of it holding a React other than the renderer's.)
   jest.resetModules();
@@ -114,7 +115,7 @@ async function launch(saved: GameState[] | null) {
     await storage.setItem(KEYS.game, JSON.stringify(record));
   }
   // The platform reports the launch link on every call, for the whole run.
-  jest.mocked(Linking.getInitialURL).mockResolvedValue(LINK);
+  jest.mocked(Linking.getInitialURL).mockResolvedValue(launchUrl);
 
   /** Storage reads, the link's promise and the autosave's 250 ms timer, all settled. */
   const settle = () =>
@@ -141,6 +142,11 @@ async function launch(saved: GameState[] | null) {
     tree,
     press,
     storedActions,
+    /** Something the page does outside the app, and whatever the app does about it, settled. */
+    outside: async (fn: () => void) => {
+      await act(async () => fn());
+      await settle();
+    },
     unmount: () => act(async () => tree.unmount()),
     /** A render below the boundary fails; the next render draws again. */
     async crash(): Promise<void> {
@@ -224,5 +230,34 @@ describe('the link the app was launched with', () => {
     expect(pieces(app.tree)).toContain('b3, Black man');
     expect(await app.storedActions()).toBe(4);
     await app.unmount();
+  });
+});
+
+describe('a link to the web page that is already open', () => {
+  // It differs from the open page in the fragment alone (webLinkFor writes
+  // `#code=`), so the browser loads nothing again, getInitialURL still answers
+  // the address the page loaded with, and react-native-web's Linking raises no
+  // `url` event: the screen hears it through `hashchange` or not at all.
+  it('is heard, asked about, and loaded; and the screen stops listening when it goes', async () => {
+    const page = onWebPage('https://example.com/multidcheckers/');
+    try {
+      // Launched at the page's own address, with no code in it.
+      const app = await launch(OWN_GAME, 'https://example.com/multidcheckers/');
+      expect(texts(app.tree)).not.toContain(PROMPT);
+      expect(page.listeners.size).toBe(1);
+      await app.outside(() => page.follow(`https://example.com/multidcheckers/#code=${encodeURIComponent(encodeGame(LINK_GAME, { mode: 'local' }))}`));
+      expect(texts(app.tree)).toContain(PROMPT);
+      await app.press('Yes, load it');
+      expect(pieces(app.tree)).toHaveLength(23);
+      expect(pieces(app.tree)).toContain('b3, Black man');
+      expect(await app.storedActions()).toBe(4);
+      // A fragment that carries no code is not a link to answer.
+      await app.outside(() => page.follow('https://example.com/multidcheckers/#top'));
+      expect(texts(app.tree)).not.toContain(PROMPT);
+      await app.unmount();
+      expect(page.listeners.size).toBe(0);
+    } finally {
+      page.restore();
+    }
   });
 });

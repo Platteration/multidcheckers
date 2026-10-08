@@ -28,7 +28,7 @@ import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { KEYS, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
 import { useReduceMotion } from '../motion';
-import { clearCodeFromUrl, codeFromUrl, takeLaunchUrl, webLinkFor } from '../app/links';
+import { clearCodeFromUrl, codeFromUrl, onWebHashChange, takeLaunchUrl, webLinkFor } from '../app/links';
 import { narrate, variantsLabel } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
@@ -148,7 +148,16 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
       const code = codeFromUrl(url);
       if (code) arriveCodeRef.current(code);
     });
-    return () => sub.remove();
+    // On the web a link to this page that arrives while it is open changes
+    // only the fragment, which reloads nothing and raises no `url` event.
+    const unhash = onWebHashChange((url) => {
+      const code = codeFromUrl(url);
+      if (code) arriveCodeRef.current(code);
+    });
+    return () => {
+      sub.remove();
+      unhash();
+    };
   }, []);
 
   // A tiny multiverse for the welcome pages: four moves, then a travel back to

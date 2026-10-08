@@ -67,8 +67,10 @@ opponent must defend, or pull a doomed piece out of the present.
   biggest multiverse, longest game, and puzzles solved.
 - **A welcome on first launch** that shows the one idea that matters, with a
   real tiny multiverse, and offers the puzzles.
-- **Links.** A game code also loads from a link: `?code=` on the web build
-  and the app's own scheme on a device.
+- **Links.** A game code also loads from a link: `#code=` on the web build
+  (in the fragment, which a browser never sends to the site's host, so a long
+  game still opens and the host never logs it; `?code=` links made before
+  still load) and the app's own scheme on a device.
 - **Fits the screen.** On a device the app is locked to portrait
   (`orientation` in `app.json`), so the board stacks over the map; the
   side-by-side layout the screen keeps for a window half again wider than it
@@ -127,30 +129,64 @@ node scripts/build-web.mjs --base /multidcheckers    # the same site, served und
 `.well-known/security.txt`, `_expo/` (the game) and `assets/` (the sounds),
 plus the hosts' configurations, which `npx expo export` copies from
 `public/`: `_headers` and `_redirects` for Netlify and Cloudflare Pages,
-`.htaccess` for Apache. Each host reads its own and serves none of them. For
-nginx, copy `deploy/nginx.conf` into the server's configuration and set
-`server_name`, `root` and the certificate paths. Never point a host at the
-checkout: `.git/` holds the whole history. Should that happen anyway, the
-Apache and nginx rules answer 404 for every dotfile but `/.well-known/`, and
-for `README.md`, `deploy/`, `_headers`, `_redirects` and `metadata.json`;
-`_redirects` does the same on Netlify for the files it could see. (`npm run
-build:web` leaves `metadata.json`, the exporter's manifest for EAS Update,
-out of the site; a plain `npx expo export` does not.)
+`.htaccess` for Apache, and an empty `.nojekyll` for GitHub Pages. Netlify
+refuses all four with the not-found page, and Apache and nginx refuse the
+lot; Cloudflare Pages serves `.htaccess` and `.nojekyll` as files (it reads
+no 404 rules), and GitHub Pages serves all four. Nothing in them is secret.
+(`npm run build:web` leaves `metadata.json`, the exporter's manifest for EAS
+Update, out of the site; a plain `npx expo export` does not.)
+
+**Never point a host at the checkout**: `.git/` holds the whole history. In a
+checkout, `.htaccess` and `_redirects` sit in `public/`, where no host reads
+them, so Apache, Netlify and the rest serve every file in it. Only nginx
+still refuses every dotfile but `/.well-known/`, and `README.md`, `deploy/`,
+`_headers`, `_redirects` and `metadata.json`, because its rules live in the
+server's own configuration rather than in the folder.
+
+**nginx**: copy `deploy/nginx.conf` into the server's configuration (it is
+included from the `http {}` block) and set `server_name`, `root` and the
+certificate paths. It asks for HTTP/2 on the `listen` lines, which nginx
+reads from 1.9.5 on, including the 1.24 of Ubuntu 24.04 and the 1.22 of
+Debian 12; from 1.25.1, `nginx -t` warns that this spelling is deprecated,
+which is harmless.
+
+**Apache** needs two modules that Debian and Ubuntu leave off, and has to be
+allowed to read `.htaccess` at all, which they do not allow under
+`/var/www`:
+
+```sh
+sudo a2enmod rewrite headers
+# in the site's <Directory> block (or the virtual host's):
+#   AllowOverride FileInfo Options      (or All)
+# and in the server's configuration, which .htaccess cannot set:
+#   ServerTokens Prod
+sudo systemctl reload apache2
+```
+
+Without a module, every request answers 500 and the error log names the
+directive (`Invalid command 'RewriteEngine'`): the file wraps nothing in
+`<IfModule>`, which would serve the folder with none of the rules and say
+nothing. Without `AllowOverride`, Apache ignores the file without a word, so
+run the launch checklist below. Without `ServerTokens Prod`, every response
+names Apache's version and the operating system (and OpenSSL's version, with
+mod_ssl).
 
 **Response headers.** The same set is in `public/_headers`,
 `public/.htaccess` and `deploy/nginx.conf`, and
-`src/app/__tests__/website.test.ts` fails when they disagree:
+`src/app/__tests__/website.test.ts` fails when they disagree; `npm run
+test:e2e` also serves the built site from a real nginx and a real Apache
+where they are installed (`e2e/hosts.mjs`) and checks what each one sends:
 
 | Header | Value | Why |
 | --- | --- | --- |
 | `Content-Security-Policy` | `default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'` | Only the site's own script, stylesheet, favicon and sounds load, measured by playing the game in Chromium under it. The one hash is the empty string's: react-native-web creates an empty `<style>` element and fills it through the CSSOM, which the policy does not govern, so no `'unsafe-inline'` is needed. `connect-src 'none'` makes any network request fail loudly. Trusted Types are enforced with no policy, because nothing in the game writes HTML from a string. |
 | `X-Frame-Options` | `DENY` | With `frame-ancestors 'none'`: no other site can frame the game (clickjacking). |
 | `X-Content-Type-Options` | `nosniff` | Files are what their type says. |
-| `Referrer-Policy` | `no-referrer` | A game code travels in the address (`?code=`), so no address is ever sent on. |
+| `Referrer-Policy` | `no-referrer` | A game code travels in the address (`#code=`, and `?code=` in links made before), so no address is ever sent on. |
 | `Permissions-Policy` | everything off but `autoplay` and `clipboard-write` for this site | The sound effects, and Copy in Play by message. Share… uses `web-share`, which is left at its default (this site only). |
 | `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy` | `same-origin` | No other window keeps a handle on this one, and no other site embeds its files. |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | Browsers remember to use HTTPS. |
-| `Cache-Control` | a year, `immutable`, for `_expo/static/` and `assets/`; `no-cache` for everything else | The game and the sounds carry a hash of their contents in their names; every other file keeps its name from one deploy to the next, so it is revalidated on every load. |
+| `Cache-Control` | a year, `immutable`, for `_expo/static/` and `assets/`; `no-cache` for everything else | The game and the sounds carry a hash of their contents in their names; every other file keeps its name from one deploy to the next, so it is revalidated on every load. Netlify applies a path's rule to a 404 there too (it has no rule by status; Cloudflare Pages is taken to do the same), so a name the live deploy does not hold, asked for by a tab left open across a deploy, is a 404 a browser may keep a year; nginx and Apache answer it with `no-cache`. |
 
 **GitHub Pages sends none of these headers.** The built `index.html` and
 `404.html` carry the policy (less `frame-ancestors`, which a `<meta>` cannot
@@ -188,6 +224,8 @@ visitor with JavaScript off reads why the page is empty.
 ```sh
 curl -sI http://SITE/ | head -1                      # a 301 to https
 curl -sI https://SITE/ | grep -i -E 'content-security|frame-options|strict-transport|nosniff|referrer|permissions|cross-origin|cache-control'
+                                                     # all nine; none means Apache is not reading .htaccess
+curl -sI https://SITE/ | grep -i '^server:'           # no version number
 curl -sI https://SITE/.git/HEAD | head -1             # 404
 curl -sI https://SITE/README.md | head -1             # 404
 curl -s  https://SITE/_expo/ | grep -c 'isn’t here'   # 1: the not-found page, not a listing
@@ -198,7 +236,10 @@ Then play a game, open every sheet, share a code and load it from its link,
 and check that the browser console shows no `Content Security Policy`
 lines. The `Expires` date in `security.txt` is 8 October 2027 and needs
 renewing before then (`website.test.ts` fails once it has passed). On GitHub
-Pages, Jekyll skips dot-folders and the Pages upload action can leave hidden
+Pages, a deploy from a branch runs Jekyll over the folder unless it holds a
+`.nojekyll`, and Jekyll leaves out every path that starts with `_` or `.`,
+`_expo/` (the whole game) among them: the site carries one, so keep it when
+copying the folder to the branch. The Pages upload action can leave hidden
 files out, so check after a deploy that `/.well-known/security.txt` is
 served.
 
@@ -222,8 +263,23 @@ capture, the sounds, Play by message and the link it makes, the settings, a
 reload, a game against the bot, the replay, the other sheets and a puzzle,
 the not-found page, the repository's own files, and the safety net. It fails
 on any policy violation, page error, console error or request outside the
-sub-path. Playwright is a devDependency; its Chromium comes from
+sub-path. Share… is driven both ways on every system (Chromium has a share
+sheet on macOS and Windows and none on Linux, so the suite takes it away for
+the clipboard fallback and hands the page one of its own for the link), and
+the link it makes is followed in the tab already showing the game and, for a
+90-action game (`e2e/long-game.txt`), longer than a host takes in a request
+line, in a fresh one. Playwright is a devDependency; its Chromium comes from
 `npx playwright install chromium`.
+
+Then `e2e/hosts.mjs` copies the built site with a checkout's files planted
+in it, loads `deploy/nginx.conf` into the installed nginx and the site's
+`.htaccess` into the installed Apache (with the modules, `AllowOverride` and
+`ServerTokens` the Deploy section asks for), and checks every path's
+headers, the refusals, the redirect and the `Server` header, and that an
+Apache without `mod_rewrite` and `mod_headers` refuses the site rather than
+serving it bare. It needs nginx, Apache as Debian and Ubuntu install it and
+openssl, which GitHub's Ubuntu runner has; elsewhere it says it skipped,
+and with `CI` set it fails instead.
 
 `.github/workflows/ci.yml` runs the lint, the typecheck, the tests, the
 conventions test, an Android and web export and the browser suite on every
@@ -268,7 +324,7 @@ public/                    the website around the game, which the web export
                            copies beside it: the page template (index.html),
                            the safety net (guard.js), site.css, 404.html,
                            robots.txt, .well-known/security.txt, and _headers,
-                           _redirects and .htaccess for the hosts
+                           _redirects, .htaccess and .nojekyll for the hosts
 deploy/nginx.conf          the same headers and rules for nginx
 app.config.js              the web build's sub-path, when WEB_BASE_URL asks for one
 scripts/build-web.mjs      builds the site into dist-web/ (npm run build:web)
@@ -278,6 +334,7 @@ src/app/__tests__/website.test.ts
 e2e/serve.mjs, e2e/run.mjs the browser suite's host (Netlify's reading of
                            _headers and _redirects, under a sub-path) and the
                            game played under it
+e2e/hosts.mjs              the built site on a real nginx and a real Apache
 ```
 
 The engine is pure TypeScript with no React dependency, so the rules can be

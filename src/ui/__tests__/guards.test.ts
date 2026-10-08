@@ -80,9 +80,12 @@ describe('a game arriving by link', () => {
     const src = source('GameScreen.tsx');
     expect(src).toMatch(/hasGameToLoseRef\.current = linkNeedsConfirming\(game\.history\.length\);/);
     expect(src).toMatch(/if \(hasGameToLoseRef\.current\) setLinkCode\(code\);\s*else acceptCodeRef\.current\(code\);/);
-    // Both the cold-start URL and every later one go through the offer, and
-    // nothing loads a link's code without passing through it.
-    expect(src.match(/if \(code\) arriveCodeRef\.current\(code\);/g)).toHaveLength(2);
+    // Every way a link arrives goes through the offer - the cold-start URL,
+    // the `url` event, and on the web a `hashchange`, which is how a link to
+    // the page already open arrives - and nothing loads a link's code without
+    // passing through it.
+    expect(src.match(/if \(code\) arriveCodeRef\.current\(code\);/g)).toHaveLength(3);
+    expect(src).toMatch(/onWebHashChange\(\(url\) => \{\s*const code = codeFromUrl\(url\);\s*if \(code\) arriveCodeRef\.current\(code\);/);
     expect(src).not.toMatch(/loadCodeRef/);
   });
 });
