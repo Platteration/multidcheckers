@@ -41,6 +41,28 @@ export function codeFromUrl(url: string | null | undefined): string | null {
   return /\/load\/([^/?#]+)\/?$/.exec(parts.path)?.[1] ?? null;
 }
 
+let launchUrlTaken = false;
+
+/**
+ * The address the app was launched with, the first time it is asked for in a
+ * run, and null every time after. `read` is the platform's getInitialURL,
+ * which is no record of what is still waiting: React Native reports the intent
+ * or launch option that started the app for as long as it runs, and
+ * react-native-web the `location.href` it read when the bundle loaded, before
+ * clearCodeFromUrl took the code out of it. The screen that asks is mounted
+ * again by the error boundary, from both of its buttons, and asking again
+ * there answered the link a second time: after "Start a new game" it loaded
+ * the launch link's game over the new game the reset had just promised,
+ * without a question, one the player had declined included, and after "Try
+ * again" it put a declined link's question back. A link that arrives while the
+ * app runs comes through the `url` event instead, once per link.
+ */
+export function takeLaunchUrl(read: () => Promise<string | null>): Promise<string | null> {
+  if (launchUrlTaken) return Promise.resolve(null);
+  launchUrlTaken = true;
+  return read();
+}
+
 /** A shareable link for the web build, or null when not running on the web. */
 export function webLinkFor(code: string): string | null {
   if (typeof window === 'undefined' || !window.location?.origin || window.location.origin.startsWith('null')) return null;

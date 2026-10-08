@@ -28,7 +28,7 @@ import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { KEYS, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
 import { useReduceMotion } from '../motion';
-import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
+import { clearCodeFromUrl, codeFromUrl, takeLaunchUrl, webLinkFor } from '../app/links';
 import { narrate, variantsLabel } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
@@ -134,8 +134,11 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
   };
   const arriveCodeRef = useRef(arriveCode);
   arriveCodeRef.current = arriveCode;
+  // The launch link is asked for once per run (takeLaunchUrl): this screen is
+  // mounted again by the error boundary, and the platform reports the same
+  // launch link to every mount.
   useEffect(() => {
-    Linking.getInitialURL()
+    takeLaunchUrl(() => Linking.getInitialURL())
       .then((url) => {
         const code = codeFromUrl(url);
         if (code) arriveCodeRef.current(code);

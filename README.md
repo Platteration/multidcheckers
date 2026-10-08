@@ -262,7 +262,8 @@ src/ui/*Modal.tsx          menu, rules, settings, new game, puzzles, share, extr
 src/ui/ErrorBoundary.tsx   the fallback for a render that throws; its button clears the saved game
 src/ui/__tests__/          contrast checks on the header text (drawn straight on
                            the background), the map's windowing, the error
-                           boundary, the board, the share sheet and the guards
+                           boundary, the launch link, the board, the share
+                           sheet and the guards
 public/                    the website around the game, which the web export
                            copies beside it: the page template (index.html),
                            the safety net (guard.js), site.css, 404.html,
