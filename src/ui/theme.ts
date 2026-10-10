@@ -63,7 +63,7 @@ const LIGHT: Base = {
   panelRaised: '#e9e2d3',
   border: '#b7b2a4',
   text: '#24333e',
-  textMuted: '#5b6b72',
+  textMuted: '#536269',
   travel: '#296f69',
   focus: '#24333e',
   success: '#37734d',
@@ -109,7 +109,7 @@ export const PIECE_SETS: readonly PieceSet[] = [
     colors: ['#e8333f', '#262633'],
     edge: ['#8f1620', '#c9cbe6'],
     ink: ['#ffe2e4', '#ffd66b'],
-    accent: { dark: ['#e8333f', '#c9cbe6'], light: ['#c4202c', '#262633'] },
+    accent: { dark: ['#ff8fa8', '#c9cbe6'], light: ['#c4202c', '#262633'] },
     premium: false,
   },
   {
@@ -119,7 +119,7 @@ export const PIECE_SETS: readonly PieceSet[] = [
     colors: ['#f4ead2', '#1f1a17'],
     edge: ['#b7a77c', '#7d6a58'],
     ink: ['#8a6d2b', '#e8c877'],
-    accent: { dark: ['#f4ead2', '#c9b79a'], light: ['#8a6d2b', '#1f1a17'] },
+    accent: { dark: ['#f4ead2', '#c9b79a'], light: ['#735b23', '#1f1a17'] },
     premium: false,
   },
   {
@@ -129,7 +129,7 @@ export const PIECE_SETS: readonly PieceSet[] = [
     colors: ['#ff9f2e', '#6d3bd9'],
     edge: ['#b0611a', '#3c1f86'],
     ink: ['#4a2a00', '#ffe9b0'],
-    accent: { dark: ['#ff9f2e', '#b18cff'], light: ['#b0611a', '#4c25a8'] },
+    accent: { dark: ['#ff9f2e', '#caa0ff'], light: ['#944f14', '#4c25a8'] },
     premium: true,
   },
   {
@@ -139,7 +139,7 @@ export const PIECE_SETS: readonly PieceSet[] = [
     colors: ['#6fe3d1', '#1d3557'],
     edge: ['#2a8f80', '#0e1b2f'],
     ink: ['#0e4a42', '#bfe4ff'],
-    accent: { dark: ['#6fe3d1', '#9ec5ff'], light: ['#1f7f72', '#1d3557'] },
+    accent: { dark: ['#6fe3d1', '#9ec5ff'], light: ['#196b60', '#1d3557'] },
     premium: true,
   },
 ];

@@ -518,7 +518,7 @@ const makeStyles = (colors: Theme) =>
   safe: { flex: 1, backgroundColor: colors.background },
   stack: { flex: 1 },
   split: { flex: 1, flexDirection: 'row' },
-  splitLeft: { flex: 1, justifyContent: 'flex-start' },
+  splitLeft: { flex: 1 },
   splitRight: { flex: 1, paddingTop: spacing.sm },
   header: {
     flexDirection: 'row',
