@@ -30,4 +30,9 @@ describe('game codes', () => {
     expect(() => decodeGame('hello')).toThrow(/not a 5D/);
     expect(() => decodeGame('5DCK.!!!')).toThrow(/damaged/);
   });
+
+  it('rejects malformed actions before the engine sees them', () => {
+    const payload = { v: 1, r: {}, m: 'local', a: [{ type: 'move', timeline: 0, move: { from: 1, path: ['2'], captures: [] } }] };
+    expect(() => decodeGame(`5DCK.${encode(JSON.stringify(payload))}`)).toThrow(/invalid move/);
+  });
 });

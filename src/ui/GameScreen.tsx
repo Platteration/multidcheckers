@@ -27,7 +27,7 @@ import { useEntitlements } from '../app/entitlements';
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { keys, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
-import { codeFromUrl, webLinkFor } from '../app/links';
+import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
 import { narrate } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
@@ -100,6 +100,7 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
       const loaded = decodeGame(code);
       game.load(loaded.history, loaded.setup);
       setReplayIndex(null);
+      clearCodeFromUrl();
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : String(e);
@@ -107,22 +108,32 @@ export function GameScreen({ initialHistory, initialSetup }: Props) {
   };
   const loadCodeRef = useRef(loadCode);
   loadCodeRef.current = loadCode;
+  const acceptIncomingCode = (code: string) => {
+    const open = () => {
+      const problem = loadCodeRef.current(code);
+      if (problem) Alert.alert('Could not load shared game', problem);
+    };
+    if (game.history.length > 1) {
+      Alert.alert('Open shared game?', 'Loading this link replaces the game in progress.', [
+        { text: 'Keep playing', style: 'cancel' },
+        { text: 'Open shared game', style: 'destructive', onPress: open },
+      ]);
+    } else {
+      open();
+    }
+  };
+  const acceptIncomingCodeRef = useRef(acceptIncomingCode);
+  acceptIncomingCodeRef.current = acceptIncomingCode;
   useEffect(() => {
     Linking.getInitialURL()
       .then((url) => {
         const code = codeFromUrl(url);
-        if (code) {
-          const problem = loadCodeRef.current(code);
-          if (problem) Alert.alert('Could not load shared game', problem);
-        }
+        if (code) acceptIncomingCodeRef.current(code);
       })
       .catch(() => {});
     const sub = Linking.addEventListener('url', ({ url }) => {
       const code = codeFromUrl(url);
-      if (code) {
-        const problem = loadCodeRef.current(code);
-        if (problem) Alert.alert('Could not load shared game', problem);
-      }
+      if (code) acceptIncomingCodeRef.current(code);
     });
     return () => sub.remove();
   }, []);
