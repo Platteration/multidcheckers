@@ -1,0 +1,51 @@
+# Publishes 5D Checkers for browser testing; native store releases use EAS.
+name: Deploy web build
+
+on:
+  push:
+    branches: [codex/ui-readiness-fixes-20261010, main, master, claude/5d-game-parody-mobile-805zip]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check multidcheckers before publishing
+        run: npm run typecheck && npm test -- --ci --runInBand
+        env:
+          CI: 1
+      - name: Configure repository URL prefix
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('app.json'));a.expo.experiments={...(a.expo.experiments||{}),baseUrl:'/'+process.env.REPOSITORY_NAME};fs.writeFileSync('app.json',JSON.stringify(a,null,2))"
+      - name: Export 5D Checkers for the web
+        run: npx expo export --platform web --output-dir dist-web
+        env:
+          CI: 1
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
