@@ -107,7 +107,7 @@ npm run web        # in a browser
 Quality checks:
 
 ```sh
-npm test           # engine unit tests (jest-expo)
+npm test           # engine unit tests (Vitest)
 npm run typecheck  # tsc --noEmit
 ```
 

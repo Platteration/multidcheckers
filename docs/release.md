@@ -8,7 +8,7 @@ The app identifiers are `com.platteration.multidcheckers` on iOS and Android. Co
 
 ## Native build and submission
 
-1. Resolve outstanding dependency-audit findings; keep the audit gate enabled. Run `npm ci` and `npm run typecheck && npm test -- --ci --runInBand`.
+1. Resolve outstanding dependency-audit findings; keep the audit gate enabled. Run `npm ci` and `npm run typecheck && npm test`.
 2. Sign in to the correct Expo account with `npx eas-cli login`, then link this checkout with `npx eas-cli init`. Use the existing profiles in `eas.json`. Never commit signing credentials.
 3. Build an Android tester APK with `npx eas-cli build --profile preview --platform android`. Obtain an iOS internal/TestFlight build through your Apple account.
 4. Test cold launch, safe areas, portrait/landscape and tablet layouts, background/foreground recovery, force-close/reopen, sound, vibration, screen readers, focus, reduce motion and every cosmetic on physical devices. Browser emulation and Metro exports do not verify these.

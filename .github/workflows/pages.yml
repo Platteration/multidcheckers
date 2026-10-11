@@ -26,7 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Check multidcheckers before publishing
-        run: npm run typecheck && npm test -- --ci --runInBand
+        run: npm run typecheck && npm test
         env:
           CI: 1
       - name: Configure repository URL prefix
