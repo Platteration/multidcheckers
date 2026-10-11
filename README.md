@@ -88,9 +88,11 @@ Extras sheet already respect the entitlement.
 
 `.github/workflows/ci.yml` runs the typecheck, the tests, and a web export
 on every push. `eas.json` has development, preview, and production profiles
-for [EAS Build](https://docs.expo.dev/build/introduction/). The icons in
-`assets/` are generated, so replace them with real artwork before a store
-release.
+for [EAS Build](https://docs.expo.dev/build/introduction/). The icon family in
+`assets/` is original Blender relief artwork. Its editable scene is
+`assets/artwork/icon.blend`; regenerate it with
+`blender -b --python scripts/render-icons.py` (Blender 4.3). Inspect adaptive masks
+and the launch splash on Android/iOS devices before a store release.
 
 ## Running it
 
@@ -105,7 +107,7 @@ npm run web        # in a browser
 Quality checks:
 
 ```sh
-npm test           # engine unit tests (jest-expo)
+npm test           # engine unit tests (Vitest)
 npm run typecheck  # tsc --noEmit
 ```
 
