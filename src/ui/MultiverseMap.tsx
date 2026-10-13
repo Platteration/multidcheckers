@@ -315,7 +315,6 @@ const makeStyles = (colors: Theme) =>
     fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
-    opacity: 0.85,
   },
   timelineRow: { height: ROW, position: 'relative' },
   label: {

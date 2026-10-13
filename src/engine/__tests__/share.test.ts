@@ -60,6 +60,28 @@ describe('game codes', () => {
     expect(() => decodeGame('5DCK.!!!')).toThrow(/damaged/);
   });
 
+  it('rejects malformed actions before the engine sees them', () => {
+    const payload = { v: 1, r: {}, m: 'local', a: [{ type: 'move', timeline: 0, move: { from: 1, path: ['2'], captures: [] } }] };
+    expect(() => decodeGame(`5DCK.${encode(JSON.stringify(payload))}`)).toThrow(/invalid move/);
+  });
+
+  it('refuses a list that ends in nonsense before replaying the moves in front of it', () => {
+    // A legal opening and then a square that is not on the board: the shape is
+    // read for every action first, so the answer is the shape's, not the rules'.
+    const actions = [step(index(2, 1), index(3, 0)), step(index(5, 6), index(4, 7)), step(64, 65)];
+    expect(() => decodeGame(codeFor({ v: 1, r: {}, m: 'local', a: actions }))).toThrow(/invalid move, one that is not legal in any game/);
+    expect(() => decodeGame(codeFor({ v: 1, r: {}, m: 'local', a: [{ type: 'travel', from: { timeline: 0, square: '17' }, to: { timeline: 0, turn: 0 } }] }))).toThrow(/invalid move/);
+    expect(() => decodeGame(codeFor({ v: 1, r: {}, m: 'local', a: [{ type: 'wait' }] }))).toThrow(/invalid move/);
+  });
+
+  it('answers a payload that is not an object as a code it cannot read, not with a TypeError', () => {
+    // JSON's `null`, a number and a string all parse; reading `.v` off null
+    // threw "Cannot read properties of null", which the screen then showed.
+    for (const text of ['null', '7', '"5DCK"']) {
+      expect(() => decodeGame('5DCK.' + encode(text))).toThrow(/version this app cannot read/);
+    }
+  });
+
   it('reads a code that a message wrapped', () => {
     // Codes are long and chat clients, email and terminals all break long
     // tokens. None of the whitespace belongs to the alphabet, so a wrapped
@@ -76,11 +98,17 @@ describe('game codes', () => {
 
   it('takes the rule variants as booleans of its own making', () => {
     // The sender chooses the rules for the game you load, so nothing but the
-    // three known keys reaches the engine, and each one as a real boolean.
+    // three known keys reaches the engine, and each one as a real boolean. A
+    // rule is on only for `true`: this app writes booleans, and a 1, a "yes" or
+    // an object is nobody's choice of rule.
     const loaded = decodeGame(
       codeFor({ v: 1, r: { flyingKings: 1, backCapture: 0, strictPresent: null, sneaky: true }, m: 'local', a: [] }),
     );
-    expect(loaded.history[0]?.rules).toEqual({ flyingKings: true, backCapture: false, strictPresent: false });
+    expect(loaded.history[0]?.rules).toEqual({ flyingKings: false, backCapture: false, strictPresent: false });
+    const truthy = decodeGame(codeFor({ v: 1, r: { flyingKings: 'yes', backCapture: {}, strictPresent: 1 }, m: 'local', a: [] }));
+    expect(truthy.history[0]?.rules).toEqual({ flyingKings: false, backCapture: false, strictPresent: false });
+    const on = decodeGame(codeFor({ v: 1, r: { flyingKings: true, backCapture: true, strictPresent: true }, m: 'local', a: [] }));
+    expect(on.history[0]?.rules).toEqual({ flyingKings: true, backCapture: true, strictPresent: true });
     expect(decodeGame(codeFor({ v: 1, r: null, m: 'local', a: [] })).history[0]?.rules).toEqual({
       flyingKings: false,
       backCapture: false,

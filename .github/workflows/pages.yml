@@ -1,0 +1,62 @@
+# Publishes 5D Checkers to GitHub Pages for browser testing; native store releases use EAS.
+# Enable Pages for the repository (Settings → Pages → Source: GitHub Actions) once. The
+# repository has no main branch yet, and the run-by-hand button appears only once this file is
+# on the default branch, so until one of those is true nothing deploys (README, "Deploy").
+name: Deploy web build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The build job runs `npm ci`, the type check, the unit tests and the Expo exporter, so it gets
+# no more than read: anything in the dependency tree would otherwise hold a token that can
+# publish the public site and mint an OIDC identity for this repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Nothing after the checkout uses git; without this the job's token is left in
+          # .git/config for every later step to read.
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # The site is served from <user>.github.io/<repository>/, so every address in it carries
+      # /<repository>, and the policy goes into each page as a <meta>, Pages sending no headers
+      # (scripts/build-web.mjs). Pages reads none of the hosts' configurations the site carries
+      # and serves them as plain files, which README's Deploy section says is harmless.
+      - name: Build the website for GitHub Pages
+        run: node scripts/build-web.mjs --base "/$REPOSITORY" --out dist-web
+        env:
+          REPOSITORY: ${{ github.event.repository.name }}
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: dist-web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

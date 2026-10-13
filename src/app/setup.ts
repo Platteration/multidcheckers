@@ -153,12 +153,14 @@ export function looksLikeSavedGame(v: unknown): v is AnySaved {
 
 /**
  * The rule variants as booleans of our own making. Saved games and shared codes
- * both carry them, and both come from outside, so nothing else reaches newGame:
- * `{"flyingKings": 1}` would otherwise turn the variant on.
+ * both carry them, and both come from outside, so nothing else reaches newGame.
+ * A rule is on only when it is `true`: this app writes nothing else, and a `1`
+ * or a `"yes"` is not a rule anybody chose (`cleanVariants` reads the stored
+ * settings the same way).
  */
 export function cleanRules(v: unknown): Partial<Rules> {
-  const r = (v ?? {}) as Partial<Rules>;
-  return { flyingKings: !!r.flyingKings, backCapture: !!r.backCapture, strictPresent: !!r.strictPresent };
+  const r = (v ?? {}) as Partial<Record<keyof Rules, unknown>>;
+  return { flyingKings: r.flyingKings === true, backCapture: r.backCapture === true, strictPresent: r.strictPresent === true };
 }
 
 /**

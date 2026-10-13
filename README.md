@@ -109,9 +109,14 @@ npm run web        # in a browser
 To produce store builds use [EAS Build](https://docs.expo.dev/build/introduction/)
 (`npx eas build --platform ios|android`). The bundle identifiers are set in
 `app.json`. `eas.json` has development, preview, and production profiles
-for EAS Build. The icons in `assets/` are placeholders (nothing in the
-repository generates them), so replace them with real artwork before a store
-release.
+for EAS Build. The icon family in `assets/` (the icon, the favicon, the
+Android adaptive layers and the splash image the `expo-splash-screen` plugin
+shows) is Blender relief artwork. Its editable scene is
+`assets/artwork/icon.blend`; regenerate it with
+`blender -b --python scripts/render-icons.py` (Blender 4.3). Inspect the
+adaptive masks and the launch splash on Android and iOS devices before a store
+release. `docs/release.md` is the release checklist and `docs/store-listing.md`
+the store listing draft.
 
 ### Deploy
 
@@ -199,6 +204,17 @@ protection, HSTS, `nosniff`, the permissions, the cross-origin isolation and
 the cache rules need a host that sets headers: Netlify, Cloudflare Pages,
 Apache or nginx.
 
+**GitHub Pages, from this repository.** `.github/workflows/pages.yml` builds
+the site under `/<repository>` (`scripts/build-web.mjs --base`) after
+`npm ci`, the type check and the unit tests, and publishes it on a push to
+`main` or when run by hand from the Actions tab. This repository has no `main`
+branch yet, and the run-by-hand button only appears once the file is on the
+default branch, so until one of those is true nothing deploys. The repository's
+Pages source has to be set to GitHub Actions once (Settings, Pages), and the
+`github-pages` environment has to accept the branch that deploys. Only the
+deploy job holds `pages: write` and `id-token: write`; the job that installs
+and builds holds a read-only token and does not keep it in `.git/config`.
+
 **One origin per app.** A GitHub Pages project site lives at
 `platteration.github.io/multidcheckers/` and shares that origin with every
 other app the account publishes there. Browser storage is kept per origin,
@@ -281,6 +297,14 @@ serving it bare. It needs nginx, Apache as Debian and Ubuntu install it and
 openssl, which GitHub's Ubuntu runner has; elsewhere it says it skipped,
 and with `CI` set it fails instead.
 
+`e2e/ui-regression.py` is a separate check against the development server
+(`npm run web`), where React Native raises the layout assertions a production
+build leaves out: a move on a desktop-wide window, a reload that keeps it, a
+phone, landscape and desktop resize, and an undo, failing on any page error.
+It needs Python's Playwright (`pip install playwright`) and a Chromium, named by
+`PW_CHROMIUM` (it defaults to `/usr/bin/chromium`); CI does not run it:
+`python e2e/ui-regression.py http://localhost:8081`.
+
 `.github/workflows/ci.yml` runs the lint, the typecheck, the tests, the
 conventions test, an Android and web export and the browser suite on every
 push; a separate job runs `npm audit --omit=dev --audit-level=high` against
@@ -317,9 +341,10 @@ src/ui/MultiverseMap.tsx   the timeline map (rows = timelines, columns = turns)
 src/ui/*Modal.tsx          menu, rules, settings, new game, puzzles, share, extras
 src/ui/ErrorBoundary.tsx   the fallback for a render that throws; its button clears the saved game
 src/ui/__tests__/          contrast checks on the header text (drawn straight on
-                           the background), the map's windowing, the error
-                           boundary, the launch link, the board, the share
-                           sheet and the guards
+                           the background) and the player labels, the map's
+                           windowing and labels, the error boundary, the
+                           launch link, the board, the share sheet and the
+                           guards
 public/                    the website around the game, which the web export
                            copies beside it: the page template (index.html),
                            the safety net (guard.js), site.css, 404.html,
@@ -335,6 +360,12 @@ e2e/serve.mjs, e2e/run.mjs the browser suite's host (Netlify's reading of
                            _headers and _redirects, under a sub-path) and the
                            game played under it
 e2e/hosts.mjs              the built site on a real nginx and a real Apache
+e2e/ui-regression.py       the development-server check above (Python)
+.github/workflows/         ci.yml (the gate and the audit) and pages.yml (the
+                           GitHub Pages deploy)
+assets/artwork/icon.blend  the icons' Blender scene; scripts/render-icons.py
+                           renders assets/ from it
+docs/                      the release checklist and the store listing draft
 ```
 
 The engine is pure TypeScript with no React dependency, so the rules can be

@@ -14,9 +14,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import React from 'react';
-import { Animated, ScrollView, StyleSheet } from 'react-native';
+import { Animated, ScrollView, StyleSheet, Text } from 'react-native';
 import TestRenderer, { ReactTestInstance, ReactTestRenderer, act } from 'react-test-renderer';
-import { Action, BoardRef, GameState, Timeline, applyAction, getTimeline, index, latestBoard, latestRef, newGame, timelineLabel } from '../../engine';
+import { Action, BoardRef, GameState, Timeline, applyAction, getTimeline, index, latestBoard, latestRef, newGame, playerToMoveAt, timelineLabel } from '../../engine';
 import { HEADER, ROW, SLOT, MultiverseMap } from '../MultiverseMap';
 import { MINI_HEIGHT, MINI_WIDTH } from '../MiniBoard';
 import { DEFAULT_THEME } from '../theme';
@@ -144,6 +144,35 @@ describe('what the map mounts', () => {
     const tree = render(multiverse(90, 14), focus);
     layout(tree, { width: 0, height: 260 });
     expect(isDrawn(tree, focus)).toBe(true);
+  });
+});
+
+describe('the labels', () => {
+  /** The drawn style of the one text on the map that reads exactly `text`. */
+  const styleOf = (tree: ReactTestRenderer, text: string): { color?: unknown; opacity?: unknown } => {
+    const found = tree.root.findAll(
+      (node) => node.type === Text && ([] as unknown[]).concat(node.props.children).join('') === text,
+    );
+    if (found.length !== 1) throw new Error(`${found.length} texts read ${text}`);
+    return (StyleSheet.flatten(found[0]!.props.style as never) ?? {}) as { color?: unknown; opacity?: unknown };
+  };
+
+  it("writes the turns and the timelines' names in the label shade, at full strength", () => {
+    // Small text on the screen's own surfaces: theme.test.ts holds playerAccent
+    // to AA there, measured as a solid colour. Drawn at 0.85 opacity, as the
+    // turns used to be, the colour on screen is a blend that measurement never saw.
+    const { playerAccent } = DEFAULT_THEME;
+    const tree = render(multiverse(3, 4), { timeline: 0, turn: 0 });
+    layout(tree, VIEWPORT);
+    for (const turn of [0, 1]) {
+      const style = styleOf(tree, `t${turn}`);
+      expect(style.color).toBe(playerAccent[playerToMoveAt(turn)]);
+      expect(style.opacity ?? 1).toBe(1);
+    }
+    // Timeline 2 (T2) was opened by the second player, timeline 3 (T3) by the first.
+    expect(styleOf(tree, 'T2').color).toBe(playerAccent[1]);
+    expect(styleOf(tree, 'T3').color).toBe(playerAccent[0]);
+    for (const name of ['T2', 'T3']) expect(styleOf(tree, name).opacity ?? 1).toBe(1);
   });
 });
 

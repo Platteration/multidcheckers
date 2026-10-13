@@ -7,7 +7,9 @@ parody built on checkers. See README.md for the rules and layout.
 
 - Engine lives in `src/engine` and must stay free of React/React Native imports.
 - Boards are immutable; every rule function returns a new value.
-- `npm test` runs the jest-expo unit tests, `npm run typecheck` runs tsc.
+- `npm test` runs the jest-expo unit tests, `npm run typecheck` runs tsc. Jest stays on 29
+  with the jest-expo preset: most suites render React Native screens or mock modules, and
+  Vitest in Node (the default branch's runner from October) loaded 11 of the 26 (measured).
 - Exact versioned Expo docs: https://docs.expo.dev/versions/v57.0.0/
 
 ## Native configuration
@@ -36,6 +38,17 @@ app.json) and scans every AndroidManifest.xml under node_modules, so a module so
 adds tomorrow that declares a permission fails it until the permission is either used or
 blocked. `tsconfig.json` lists `node` in `types` for that test; `@types/node` is a
 declared devDependency for the same reason, pinned to the Node major CI runs (^22).
+Install expo packages with `npm install <pkg>@<pin from
+node_modules/expo/bundledNativeModules.json>`; `npx expo install` needs Expo's API.
+`appConfig.test.ts` holds `expo-system-ui` and `expo-splash-screen` to those pins, so a move
+of `expo` itself moves them. `package.json`'s `overrides` take two transitive packages past
+advisories their parents' ranges cannot reach: `js-yaml` 4.3.2 under
+`@istanbuljs/load-nyc-config` (babel-jest's coverage loader, whose js-yaml 3 pulls in
+`sprintf-js`) and `uuid` 11.1.1 under `xcode` (from `@expo/config-plugins`);
+`docs/release.md` says when each can go. Under uuid 11, `appConfig.test.ts` runs in Node's
+test environment with `node` added to the export conditions, as the plugins it drives run in
+Node: React Native's offers only `require` and `react-native`, which give uuid's ES-module
+browser build.
 
 ## Settings
 
@@ -126,7 +139,10 @@ again and raises no `url` event on react-native-web, so `GameScreen` also listen
 everywhere.
 `build-web.mjs` refuses an `--out` inside the checkout other than `dist-web`, `dist` or
 `web-build`, and one that holds the checkout, because the exporter empties its output folder
-first; its tests run it against a stand-in exporter in a temporary folder for that reason. On
+first; its tests run it against a stand-in exporter in a temporary folder for that reason.
+`.github/workflows/pages.yml` builds with `--base /<repository>` after `npm ci`, the type check
+and the unit tests, and deploys on a push to `main` (which does not exist yet) or by hand; its
+shape is the conventions test's. On
 the web the Vibration row is shown off, disabled and says why (`WEB_VIBRATION_HINT`), since
 `feedback.ts` never vibrates there. In a window wider than it is tall the left column is a
 `ScrollView`, whose own style must not lay out children (`justifyContent`, `alignItems`): both

@@ -3,7 +3,7 @@
  * behind it, and the light palette is what a system-light phone now gets, so
  * these pairings have to clear WCAG AA on their own.
  */
-import { HeaderTextStyle, Scheme, buildTheme, headerTextStyles } from '../theme';
+import { HeaderTextStyle, PIECE_SETS, SKINS, Scheme, buildTheme, headerTextStyles } from '../theme';
 
 const SCHEMES: readonly Scheme[] = ['light', 'dark'];
 
@@ -60,5 +60,29 @@ describe('palette contrast', () => {
       }
     }
     expect(failures).toEqual([]);
+  });
+});
+
+// The map's turn labels and timeline names are small text on the screen's own
+// surfaces, written in each piece set's label shade (`playerAccent`) rather than
+// in the checker fill, which is often too pale or too dark to read there.
+describe.each(SCHEMES)('%s player labels', (scheme) => {
+  test('normal and secondary text remain readable on every panel', () => {
+    const theme = buildTheme(scheme, 'classic', 'classic');
+    for (const background of [theme.background, theme.panel, theme.panelRaised]) {
+      for (const foreground of [theme.text, theme.textMuted]) {
+        expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+  test.each(PIECE_SETS)('$name text remains readable in every board skin', (set) => {
+    for (const skin of SKINS) {
+      const theme = buildTheme(scheme, skin.id, set.id);
+      for (const background of [theme.background, theme.panel, theme.panelRaised]) {
+        for (const foreground of theme.playerAccent) {
+          expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
   });
 });

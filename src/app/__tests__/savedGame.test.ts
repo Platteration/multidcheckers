@@ -204,6 +204,13 @@ describe('a saved game that cannot be trusted', () => {
     expect(restoreSaved(undefined)).toEqual({ kind: 'none' });
   });
 
+  it('turns a stored rule on only for true', () => {
+    // The autosave writes booleans; a 1 or a "yes" in storage is nobody's choice.
+    const rulesOf = (rules: unknown) => asGame(restoreSaved({ version: 3, rules, setup: LOCAL, actions: [] })).history[0]?.rules;
+    expect(rulesOf({ flyingKings: 1, backCapture: 'yes', strictPresent: {} })).toEqual({ flyingKings: false, backCapture: false, strictPresent: false });
+    expect(rulesOf({ flyingKings: true, backCapture: true, strictPresent: true })).toEqual({ flyingKings: true, backCapture: true, strictPresent: true });
+  });
+
   it('refuses a whole-state save that lost the action behind one of its states', () => {
     // Every state after the first records the action that made it. Skipping a
     // state without one and replaying the rest used to rebuild a game the
