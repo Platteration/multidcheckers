@@ -14,6 +14,11 @@
 //     serves the template too and the development server needs a WebSocket and HTML written
 //     from strings, both of which the policy refuses;
 //   - removes metadata.json, the exporter's manifest for EAS Update, which the site never loads;
+//   - writes _routes.json, which tells Cloudflare Pages to run the site's one Function
+//     (functions/api/[[path]].js, the sign-in and shop API of server/kit) for `<base>/api/*` and
+//     nothing else, so a static file never invokes it. The other hosts do not read it: Netlify's
+//     _redirects, Apache's .htaccess and nginx's deploy/nginx.conf refuse it like the other
+//     configurations, and GitHub Pages serves it as a file, as it serves them;
 //   - refuses to finish when the page is not the one public/index.html describes (a later SDK
 //     that stopped reading the template would ship a page with no policy and no safety net).
 import { spawnSync } from 'node:child_process';
@@ -32,7 +37,16 @@ export const BASE = /^(\/(?!\.\.?(?:\/|$))[A-Za-z0-9._~-]+)+$/;
 export const OUT_FOLDERS = ['dist-web', 'dist', 'web-build'];
 
 /** Every file the site is made of besides the bundle, the sounds and the favicon. */
-export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'robots.txt', '.well-known/security.txt', '_headers', '_redirects', '.htaccess', '.nojekyll'];
+export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'robots.txt', '.well-known/security.txt', '_headers', '_redirects', '.htaccess', '.nojekyll', '_routes.json'];
+
+/**
+ * Cloudflare Pages' _routes.json for a site under `base` ('' at the root of its domain): the
+ * Function runs for the API's paths alone. Cloudflare reads the file from the published folder
+ * and never serves it.
+ */
+export function routesFor(base) {
+  return `${JSON.stringify({ version: 1, include: [`${base}/api/*`], exclude: [] })}\n`;
+}
 
 /** The Content-Security-Policy the `/*` rule of a _headers file gives every path. */
 export function headerPolicy(headersText) {
@@ -119,6 +133,7 @@ function build({ base, out: outArg }) {
   if (run.status !== 0) fail(`expo export exited with ${run.status}`);
 
   fs.rmSync(path.join(out, 'metadata.json'), { force: true });
+  fs.writeFileSync(path.join(out, '_routes.json'), routesFor(base));
   for (const file of ['404.html', '.htaccess']) {
     const target = path.join(out, file);
     fs.writeFileSync(target, withBase(file, fs.readFileSync(target, 'utf8'), base));

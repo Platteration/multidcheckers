@@ -11,6 +11,10 @@
 # 'RewriteEngine'"), where the wrappers served every file in the folder, .git/ included, with none
 # of these headers, and logged nothing. ServerTokens cannot be set from here: set
 # `ServerTokens Prod` in the server's configuration, or every response names Apache's version.
+# The sign-in and shop API (server/kit, `node server/start.mjs` on 127.0.0.1:8788) cannot be
+# proxied from here: mod_proxy is server configuration. In the virtual host, with mod_proxy and
+# mod_proxy_http: ProxyPass "/api/" "http://127.0.0.1:8788/api/" (README, "Sign-in and the
+# shop"). Without it api/ is a 404 here and the page draws neither.
 
 Options -Indexes
 ServerSignature Off
@@ -33,13 +37,13 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 # never serve a dotfile (.git above all, and this file), except /.well-known/
 RewriteRule (^|/)\.(?!well-known/) - [R=404,L]
 # the files in the folder that are not part of the site, and the repository's own
-RewriteRule ^(_headers|_redirects|metadata\.json|README\.md|deploy/.*)$ - [R=404,L]
+RewriteRule ^(_headers|_redirects|_routes\.json|metadata\.json|README\.md|deploy/.*)$ - [R=404,L]
 # a folder with no page of its own is a 404, not a 403 that hints at a listing
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteCond %{REQUEST_FILENAME}/index.html !-f
 RewriteRule ^ - [R=404,L]
 
-Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'"
+Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'"
 Header always set X-Content-Type-Options "nosniff"
 Header always set X-Frame-Options "DENY"
 Header always set Referrer-Policy "no-referrer"

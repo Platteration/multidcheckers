@@ -1,14 +1,20 @@
 /**
- * The one seam between the game and an app store.
+ * The one seam between the game and an app store, on a phone.
  *
  * Nothing that changes rules or outcomes is ever sold: the Supporter pack
  * is cosmetics (every board skin and piece set) plus a thank-you. Until a
  * store SDK is wired in here, STORE_ENABLED stays false and every item is
- * available to everyone, so the gating code exists but never bites.
+ * available to everyone in the phone apps, so the gating code exists but
+ * never bites there.
  *
  * To go live: install a billing library (for example react-native-iap or
  * RevenueCat), implement `purchase` and `restore` against it, persist the
  * result with `saveEntitlements`, and flip STORE_ENABLED to true.
+ *
+ * The website sells the same pack through its own api/ (server/kit, Stripe
+ * Checkout), and the store is on there exactly when that api/ says so:
+ * account.tsx and EntitlementsProvider, which then read what is owned from
+ * the server and not from this file's record.
  */
 import { KEYS, loadJson, saveJson } from './persist';
 import { cleanEntitlements } from './validate';

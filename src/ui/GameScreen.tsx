@@ -39,6 +39,7 @@ import { CheckerBoard, Destination } from './CheckerBoard';
 import { MenuModal } from './MenuModal';
 import { NewGameModal } from './NewGameModal';
 import { PuzzleResultModal } from './PuzzleResultModal';
+import { AccountNotice } from './AccountNotice';
 import { ExtrasModal } from './ExtrasModal';
 import { PuzzlesModal } from './PuzzlesModal';
 import { ReplayBar } from './ReplayBar';
@@ -407,6 +408,7 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
         <View style={{ width: spacing.xs }} />
         <Button label="Menu" small onPress={() => setMenuOpen(true)} />
       </View>
+      <AccountNotice />
 
       <View style={landscape ? styles.split : styles.stack}>
       <Left style={landscape ? styles.splitLeft : undefined}>

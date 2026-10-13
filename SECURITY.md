@@ -28,7 +28,13 @@ too: the page template and safety net in `public/`, and the hosting rules
 (`public/_headers`, `public/_redirects`, `public/.htaccess`,
 `deploy/nginx.conf`): a header that is missing or wrong on one host, a file
 served that is not part of the site, or a way to run script or load anything
-the Content-Security-Policy should refuse.
+the Content-Security-Policy should refuse. So is the website's sign-in and shop
+API (`server/`, `functions/`) and the page code that talks to it
+(`src/app/account*`): a way to act as another visitor, to be granted the
+Supporter pack without Stripe's signed word, or to make the page go anywhere
+but Google's sign-in and Stripe's Checkout. `server/kit/` is a copy shared by
+several of the owner's apps; report it here all the same, and the fix is made
+in every copy at once.
 
 Out of scope: vulnerabilities in third-party dependencies that are already
 public and have an upstream fix, findings that require an attacker to already

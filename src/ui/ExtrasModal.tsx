@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccountApi, useAccount } from '../app/account';
+import { ShopProduct, WORDS, formatPrice } from '../app/accountModel';
 import { useEntitlements } from '../app/entitlements';
 import { useTheme } from '../app/theme';
 import { Button } from './Modals';
@@ -15,6 +17,9 @@ export function ExtrasModal({ visible, onClose }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { entitlements, storeEnabled, buySupporter, restorePurchases } = useEntitlements();
+  const account = useAccount();
+  // The website's shop, when its api/ sells the pack; a phone, and a site without one, never have it.
+  const shop = account.supporter;
   const [note, setNote] = useState<string | null>(null);
   const premiumSkins = SKINS.filter((s) => s.premium).map((s) => s.name);
   const premiumPieces = PIECE_SETS.filter((p) => p.premium).map((p) => p.name);
@@ -47,7 +52,9 @@ export function ExtrasModal({ visible, onClose }: Props) {
             <Text style={styles.head}>And</Text>
             <Text style={styles.list}>A supporter badge on the title, and future puzzle packs as they arrive.</Text>
             <View style={{ height: spacing.md }} />
-            {entitlements.supporter ? (
+            {shop ? (
+              <ShopItem product={shop} account={account} owned={entitlements.supporter} styles={styles} />
+            ) : entitlements.supporter ? (
               <Text style={styles.owned}>You own the Supporter pack. Thank you.</Text>
             ) : (
               <Text style={styles.body}>
@@ -56,7 +63,7 @@ export function ExtrasModal({ visible, onClose }: Props) {
             )}
           </ScrollView>
           <View style={{ height: spacing.md }} />
-          {!entitlements.supporter ? (
+          {!shop && !entitlements.supporter ? (
             <>
               <Button label="Get the Supporter pack" tone="primary" onPress={buy} disabled={!storeEnabled} />
               <View style={{ height: spacing.sm }} />
@@ -72,6 +79,38 @@ export function ExtrasModal({ visible, onClose }: Props) {
   );
 }
 
+/**
+ * The pack as the website sells it: the server's name, description and price, drawn as text,
+ * and Buy, which leaves for Stripe's Checkout. Signed out, Buy is a way to sign in first; once
+ * `api/me` reports the purchase, the item says it is owned.
+ */
+function ShopItem({ product, account, owned, styles }: { product: ShopProduct; account: AccountApi; owned: boolean; styles: ReturnType<typeof makeStyles> }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const price = product.price ? formatPrice(product.price) : null;
+  const buy = async () => {
+    setBusy(true);
+    setNote(await account.buySupporter());
+    setBusy(false);
+  };
+  return (
+    <View>
+      <Text style={styles.head}>{product.name}</Text>
+      {product.description ? <Text style={styles.body}>{product.description}</Text> : null}
+      {price ? <Text style={styles.price}>{price}</Text> : null}
+      <View style={{ height: spacing.sm }} />
+      {owned ? (
+        <Text style={styles.owned}>{WORDS.owned}</Text>
+      ) : account.user ? (
+        <Button label={WORDS.buy} tone="primary" onPress={buy} disabled={busy} />
+      ) : (
+        <Button label={WORDS.signInToBuy} tone="primary" onPress={account.signIn} />
+      )}
+      {note ? <Text style={styles.note}>{note}</Text> : null}
+    </View>
+  );
+}
+
 const makeStyles = (colors: Theme) =>
   StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: 'rgba(5,6,20,0.85)', justifyContent: 'center', padding: spacing.lg },
@@ -80,6 +119,7 @@ const makeStyles = (colors: Theme) =>
     body: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
     head: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: spacing.md, textTransform: 'uppercase', letterSpacing: 1 },
     list: { color: colors.text, fontSize: 14, marginTop: 2 },
+    price: { color: colors.text, fontSize: 18, fontWeight: '800', marginTop: spacing.sm },
     owned: { color: colors.success, fontSize: 14, fontWeight: '700' },
     note: { color: colors.travel, fontSize: 12, marginTop: spacing.sm },
   });

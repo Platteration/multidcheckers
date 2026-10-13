@@ -22,4 +22,4 @@ Support email and URL, public privacy-policy URL, age/content rating, category, 
 
 ## Data notes for the privacy-policy author
 
-Game progress and settings are stored locally. Game/challenge codes deliberately include information needed to replay a shared game; players choose who receives them. These notes do not replace a published privacy policy or a review of platform, hosting and future billing data practices.
+Game progress and settings are stored locally. Game/challenge codes deliberately include information needed to replay a shared game; players choose who receives them. The phone apps make no network request. The website, once its sign-in and shop API is configured (README, "Sign-in and the shop"), is told by Google a visitor's account id and email address when they sign in, and Stripe handles the payment when they buy; the site keeps the account id, what was bought and Stripe's customer id, and the email address only while they stay signed in, until they delete the account. These notes do not replace a published privacy policy or a review of platform, hosting and future billing data practices.

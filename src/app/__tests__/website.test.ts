@@ -274,13 +274,41 @@ describe('the response headers', () => {
     for (const f of published) expect([f, fromHeadersFile(`/${f}`)['Cache-Control']]).toEqual([f, CACHE.revalidate]);
   });
 
-  it('set every header in the nginx https server itself: never in a location, which would drop the rest, nor in another server', () => {
+  /** The one location allowed an add_header of its own: the API's, below. */
+  const API_LOCATION = 'location ^~ /api/';
+
+  it("set every header in the nginx https server itself: never in a location but the API's, which would drop the rest, nor in another server", () => {
     const { top, site } = readNginx(NGINX);
-    const everywhere = everyStatement(top).filter((s) => s.words.startsWith('add_header '));
+    const api = site.body!.filter((s) => s.words === API_LOCATION);
+    expect(api).toHaveLength(1);
+    const everywhere = everyStatement(top.map((s) => (s === site ? { ...s, body: s.body!.filter((d) => d !== api[0]) } : s))).filter((s) => s.words.startsWith('add_header '));
     const own = site.body!.filter((s) => s.words.startsWith('add_header '));
     expect(own).toHaveLength(9);
     expect(everywhere).toEqual(own);
-    expect(site.body!.filter((s) => s.words.startsWith('location ')).length).toBeGreaterThanOrEqual(5);
+    expect(site.body!.filter((s) => s.words.startsWith('location ')).length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("send the API to the kit on loopback, under its own headers and the server block's HSTS alone", () => {
+    // server/kit sets every header of its own answers (README, "Sign-in and the shop"). A location
+    // with one add_header inherits none of the server block's, which is the point here: inherited,
+    // they would go out beside the kit's, and a browser reads the last of two Referrer-Policy
+    // values. So the one header it adds is the server block's Strict-Transport-Security, as is.
+    // `^~` wins over every regular expression, so nothing under /api/ is served from the folder or
+    // refused by the locations that refuse dotfiles and the configurations.
+    const { site } = readNginx(NGINX);
+    const api = site.body!.filter((s) => s.words === API_LOCATION);
+    expect(api).toHaveLength(1);
+    const hsts = site.body!.find((s) => s.words.startsWith('add_header Strict-Transport-Security '));
+    expect(hsts).toBeDefined();
+    expect(api[0]!.body).toEqual([
+      // No URI after the address: the path reaches the API as the browser asked for it.
+      { words: 'proxy_pass http://127.0.0.1:8788' },
+      { words: 'proxy_http_version 1.1' },
+      { words: 'proxy_set_header Connection ""' },
+      { words: 'client_max_body_size 1m' },
+      { words: 'proxy_read_timeout 30s' },
+      hsts,
+    ]);
   });
 
   it('deny every feature but the sounds and the clipboard', () => {
@@ -323,7 +351,7 @@ describe('the Content-Security-Policy', () => {
       `style-src 'self' 'sha256-${createHash('sha256').update('').digest('base64')}'`,
       "img-src 'self'",
       "media-src 'self'",
-      "connect-src 'none'",
+      "connect-src 'self'",
       "base-uri 'none'",
       "form-action 'none'",
       "object-src 'none'",
@@ -348,7 +376,7 @@ describe('the Content-Security-Policy', () => {
 });
 
 describe("what the hosts refuse: the repository's own files and the hosts' configurations", () => {
-  const REFUSED = ['/README.md', '/.git/config', '/.git/HEAD', '/deploy/nginx.conf', '/_headers', '/_redirects', '/.htaccess', '/.nojekyll', '/metadata.json'];
+  const REFUSED = ['/README.md', '/.git/config', '/.git/HEAD', '/deploy/nginx.conf', '/_headers', '/_redirects', '/.htaccess', '/_routes.json', '/.nojekyll', '/metadata.json'];
   const DOTFILES = ['/.env', '/.gitignore', '/assets/.DS_Store'];
 
   // The https server's own `location ~ … { return 404; }` blocks: the port-80 server answers
@@ -604,6 +632,18 @@ describe('the build', () => {
     const notFound = fs.readFileSync(path.join(out, '404.html'), 'utf8');
     expect(notFound.match(/(?:href|src)="[^"]*"/g)).toEqual(['href="/multidcheckers/favicon.ico"', 'href="/multidcheckers/site.css"', 'href="/multidcheckers/"']);
     expect(fs.readFileSync(path.join(out, '.htaccess'), 'utf8')).toMatch(/^ErrorDocument 404 \/multidcheckers\/404\.html\nErrorDocument 403 \/multidcheckers\/404\.html$/m);
+    fs.rmSync(box.dir, { recursive: true, force: true });
+  });
+
+  it.each([
+    [[], '/api/*'],
+    [['--base', '/multidcheckers'], '/multidcheckers/api/*'],
+  ])('with %j, has Cloudflare Pages run the API for %s and for nothing else', (args, route) => {
+    // functions/api/[[path]].js is the sign-in and shop API (server/kit). With no _routes.json
+    // every request to the site would invoke it, the bundle and the sounds included.
+    const box = sandbox();
+    expect(box.run(...args)).toEqual({ status: 0, stderr: '' });
+    expect(JSON.parse(fs.readFileSync(path.join(box.repo, 'dist-web', '_routes.json'), 'utf8'))).toEqual({ version: 1, include: [route], exclude: [] });
     fs.rmSync(box.dir, { recursive: true, force: true });
   });
 

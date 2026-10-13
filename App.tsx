@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AccountProvider } from './src/app/account';
 import { EntitlementsProvider } from './src/app/entitlements';
 import { KEYS, loadJson, removeKey, setAsideGame } from './src/app/persist';
 import { ProgressProvider } from './src/app/progress';
@@ -72,15 +73,17 @@ export default function App() {
       <SettingsProvider>
         <ThemeProvider>
           <ProgressProvider>
-            <EntitlementsProvider>
-              <StatsProvider>
-                <SafeAreaProvider>
-                  <ErrorBoundary key={generation} onReset={startOver}>
-                    <Root />
-                  </ErrorBoundary>
-                </SafeAreaProvider>
-              </StatsProvider>
-            </EntitlementsProvider>
+            <AccountProvider>
+              <EntitlementsProvider>
+                <StatsProvider>
+                  <SafeAreaProvider>
+                    <ErrorBoundary key={generation} onReset={startOver}>
+                      <Root />
+                    </ErrorBoundary>
+                  </SafeAreaProvider>
+                </StatsProvider>
+              </EntitlementsProvider>
+            </AccountProvider>
           </ProgressProvider>
         </ThemeProvider>
       </SettingsProvider>

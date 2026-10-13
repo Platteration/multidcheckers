@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 import React, { useMemo, useState } from 'react';
 import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useAccount } from '../app/account';
+import { ACCOUNT_NOTES, PRIVACY_OFFLINE, PRIVACY_WITH_ACCOUNT, WORDS } from '../app/accountModel';
 import { useEntitlements } from '../app/entitlements';
 import { ReduceMotionChoice, ThemeChoice, useSettings } from '../app/settings';
 import { Button, ConfirmPanel } from './Modals';
@@ -30,30 +32,45 @@ export function SettingsModal({ visible, onClose, children }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { settings, update, reset } = useSettings();
   const { owns } = useEntitlements();
+  const account = useAccount();
   const [locked, setLocked] = useState<string | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
-  // The question is asked inside this Modal, never as a second one beside it:
+  const [confirming, setConfirming] = useState<'reset' | 'delete' | null>(null);
+  const [accountNote, setAccountNote] = useState<string | null>(null);
+  // Each question is asked inside this Modal, never as a second one beside it:
   // on iOS the view controller already presenting this sheet refuses to present
   // another, so a sibling <Modal> for the confirmation is a Reset button that
   // does nothing there. MenuModal asks its own question the same way.
   const close = () => {
-    setConfirmReset(false);
+    setConfirming(null);
+    setAccountNote(null);
     onClose();
   };
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={confirmReset ? () => setConfirmReset(false) : close}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={confirming ? () => setConfirming(null) : close}>
       <View style={styles.backdrop}>
-        {confirmReset ? (
+        {confirming === 'reset' ? (
           <ConfirmPanel
             title="Reset settings?"
             body="Every setting on this sheet goes back to its default: feel, theme, motion, board, pieces and the rule variants. Your games, record, puzzle progress and purchases are not touched."
             confirmLabel="Reset"
             cancelLabel="Keep my settings"
             onConfirm={() => {
-              setConfirmReset(false);
+              setConfirming(null);
               reset();
             }}
-            onCancel={() => setConfirmReset(false)}
+            onCancel={() => setConfirming(null)}
+          />
+        ) : confirming === 'delete' ? (
+          <ConfirmPanel
+            title={ACCOUNT_NOTES.deleteTitle}
+            body={ACCOUNT_NOTES.deleteBody}
+            confirmLabel={ACCOUNT_NOTES.deleteConfirm}
+            cancelLabel={ACCOUNT_NOTES.deleteCancel}
+            onConfirm={() => {
+              setConfirming(null);
+              void account.deleteAccount().then(setAccountNote);
+            }}
+            onCancel={() => setConfirming(null)}
           />
         ) : (
           <View style={styles.sheet}>
@@ -116,17 +133,33 @@ export function SettingsModal({ visible, onClose, children }: Props) {
                 {locked ? <Text style={styles.hint}>✦ items come with the Supporter pack (see Extras in the menu).</Text> : null}
               </Section>
               {children}
+              {account.signInOn ? (
+                <Section title={WORDS.section}>
+                  {account.user ? (
+                    <>
+                      <Text style={styles.label}>{account.user.email ? WORDS.signedInAs(account.user.email) : WORDS.signedIn}</Text>
+                      <View style={{ height: spacing.sm }} />
+                      <Button label={WORDS.signOut} onPress={() => void account.signOut().then(setAccountNote)} />
+                      <View style={{ height: spacing.sm }} />
+                      <Button label={WORDS.deleteAccount} tone="danger" onPress={() => setConfirming('delete')} />
+                    </>
+                  ) : (
+                    <Button label={WORDS.signIn} onPress={account.signIn} />
+                  )}
+                  {accountNote ? <Text style={styles.hint}>{accountNote}</Text> : null}
+                </Section>
+              ) : null}
               <Section title="Defaults">
                 <Text style={styles.hint}>Puts every setting on this sheet back as it was. Your games, record, puzzle progress and purchases stay.</Text>
                 <View style={{ height: spacing.sm }} />
-                <Button label="Reset to defaults" tone="danger" onPress={() => setConfirmReset(true)} />
+                <Button label="Reset to defaults" tone="danger" onPress={() => setConfirming('reset')} />
               </Section>
               <Section title="About">
                 <Text style={styles.label}>
                   {APP_NAME} {APP_VERSION}
                 </Text>
                 <Text style={styles.hint}>Checkers with time travel: send a piece into the past and play every timeline it makes.</Text>
-                <Text style={styles.hint}>Nothing leaves your device. There is no server, no account and no analytics; a game code goes only where you send it.</Text>
+                <Text style={styles.hint}>{account.signInOn ? PRIVACY_WITH_ACCOUNT : PRIVACY_OFFLINE}</Text>
                 <Pressable
                   accessibilityRole="link"
                   accessibilityLabel="MIT licence, source on GitHub"

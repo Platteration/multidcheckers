@@ -7,10 +7,14 @@
 # checkout serves every file in it (only deploy/nginx.conf, which lives in the server's own
 # configuration, refuses them there). Cloudflare Pages ignores 404 rules (publish the folder the
 # build writes there, which leaves metadata.json out) and serves .htaccess and .nojekyll as files;
-# GitHub Pages serves all four configuration files. Nothing in any of them is secret.
+# GitHub Pages serves all five configuration files (_routes.json, which scripts/build-web.mjs
+# writes for Cloudflare Pages, included). Nothing in any of them is secret. Netlify runs no
+# Function of this site, so its api/ is a 404 like any other missing path and the page draws no
+# sign-in and no shop.
 /_headers        /404.html  404!
 /_redirects      /404.html  404!
 /.htaccess       /404.html  404!
+/_routes.json    /404.html  404!
 /.nojekyll       /404.html  404!
 /metadata.json   /404.html  404!
 /README.md       /404.html  404!

@@ -7,6 +7,13 @@
 // mod_rewrite and mod_headers served .git/ and every other file with no header at all, Apache sent
 // no HSTS behind a TLS-terminating proxy, and nginx's port-80 server named its version.
 //
+// nginx also proxies the site's api/ to the sign-in and shop API (server/start.mjs, the kit's
+// Node adapter, here with a fake Google and a fake Stripe handed to it as its `fetch`): this
+// checks that the location reaches it with nothing of the folder's in the way, that its answers
+// leave with the API's own headers and the server block's HSTS alone, and that it is a 502, which
+// the page reads as no API, while the API is not running. Apache's .htaccess cannot proxy, so
+// there api/ is the not-found page.
+//
 // Needs nginx, Apache as Debian and Ubuntu lay it out (/usr/sbin/apache2, its modules in
 // /usr/lib/apache2/modules) and openssl. GitHub's ubuntu-24.04 runner has all of them, at the
 // versions Ubuntu 24.04 ships (nginx 1.24.0, Apache 2.4.58). Where one is missing this says so and
@@ -23,6 +30,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createFakes, envFor } from '../server/fakes.mjs';
+import { start as startApi } from '../server/start.mjs';
 import { headersFor, parseHeaders } from './serve.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -114,6 +123,8 @@ const PLANTED = {
   '.env': 'SECRET=1\n',
   'metadata.json': '{}\n',
   'assets/.DS_Store': 'x',
+  // A folder in the site's place that the API's location must never serve from.
+  'api/config': '{"planted":true}\n',
 };
 for (const [file, text] of Object.entries(PLANTED)) {
   fs.mkdirSync(path.dirname(path.join(site, file)), { recursive: true });
@@ -127,7 +138,14 @@ const sound = `/assets/assets/sounds/${fs.readdirSync(path.join(site, 'assets/as
 /** The paths of the site, each a 200 with exactly the headers _headers gives it. */
 const SERVED = ['/', '/index.html', '/guard.js', '/site.css', '/favicon.ico', '/robots.txt', '/.well-known/security.txt', bundle, sound];
 /** The files planted above, the hosts' configurations and the folders with no page: the not-found page. */
-const REFUSED = [...Object.keys(PLANTED).map((f) => `/${f}`), '/_headers', '/_redirects', '/.nojekyll', '/_expo/', '/assets/', '/no/such/page'];
+const REFUSED = [...Object.keys(PLANTED).filter((f) => !f.startsWith('api/')).map((f) => `/${f}`), '/_headers', '/_redirects', '/_routes.json', '/.nojekyll', '/_expo/', '/assets/', '/no/such/page'];
+/** The headers server/kit sends on every answer of its own (server/kit/http.js, API_HEADERS), Cache-Control aside. */
+const API_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+  'referrer-policy': 'no-referrer',
+  'cross-origin-resource-policy': 'same-origin',
+};
 
 const children = [];
 let current = 'setup';
@@ -149,7 +167,7 @@ async function nginx() {
   const dir = path.join(work, 'nginx');
   fs.mkdirSync(path.join(dir, 'logs'), { recursive: true });
   spawnSync(OPENSSL, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-subj', '/CN=localhost', '-days', '1', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem')], { stdio: 'ignore' });
-  const [plain, tls] = [await freePort(), await freePort()];
+  const [plain, tls, apiPort] = [await freePort(), await freePort(), await freePort()];
   // deploy/nginx.conf as the README says to install it: server_name, root and the certificate
   // paths set, and here the ports. Each edit has to find its line exactly once, so a file that
   // has moved on fails here rather than being tested as something it no longer is.
@@ -167,6 +185,7 @@ async function nginx() {
   edit('  root /var/www/multidcheckers;\n', `  root ${site};\n`);
   edit('/etc/letsencrypt/live/example.com/fullchain.pem', path.join(dir, 'cert.pem'));
   edit('/etc/letsencrypt/live/example.com/privkey.pem', path.join(dir, 'key.pem'));
+  edit('    proxy_pass http://127.0.0.1:8788;\n', `    proxy_pass http://127.0.0.1:${apiPort};\n`);
   fs.writeFileSync(path.join(dir, 'site.conf'), conf);
   // The http {} block a stock Debian or Ubuntu nginx.conf includes it from, less the logging.
   const temp = ['client_body', 'proxy', 'fastcgi', 'uwsgi', 'scgi'].map((t) => `  ${t}_temp_path ${path.join(dir, `${t}_temp`)};`);
@@ -242,6 +261,54 @@ async function nginx() {
 
   await check('nginx: a game in the query is past the request line it takes (the link carries it in the fragment)', async () => {
     assert.equal((await get(`${origin}/${LONG_QUERY}`)).status, 414);
+  });
+
+  await check('nginx: api/ is a 502 while the API is not running, with the HSTS line alone, and never the folder', async () => {
+    // The page reads anything but the API's JSON as no API, and draws no sign-in and no shop.
+    for (const p of ['/api/config', '/api/me']) {
+      const response = await get(`${origin}${p}`);
+      assert.equal(response.status, 502, `${p} answered ${response.status}`);
+      assert.doesNotMatch(response.body, /planted/);
+      assert.equal(response.headers['strict-transport-security'], want('/')['strict-transport-security']);
+      for (const name of ['content-security-policy', 'permissions-policy', 'x-frame-options', 'referrer-policy']) assert.equal(response.headers[name], undefined, `${p}: ${name}`);
+    }
+  });
+
+  await check("nginx: api/ reaches the sign-in and shop API, and its answers leave with the API's headers and HSTS alone", async () => {
+    // server/start.mjs as a deployment runs it, behind this proxy, with APP_URL the proxy's address.
+    const appUrl = `https://127.0.0.1:${tls}/`;
+    const fakes = await createFakes();
+    const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mdck-hosts-api-'));
+    const logs = [];
+    const api = await startApi({ env: envFor(appUrl), dataDir: data, port: apiPort, fetch: fakes.fetch, log: (level, message) => logs.push(`${level}: ${message}`) });
+    try {
+      const config = await get(`${origin}/api/config`);
+      assert.equal(config.status, 200);
+      assert.deepEqual(JSON.parse(config.body).shop.products.map((product) => [product.id, product.price]), [['supporter', { unit_amount: 299, currency: 'eur' }]]);
+      assert.equal(config.headers['cache-control'], 'public, max-age=60');
+      const me = await get(`${origin}/api/me`);
+      assert.deepEqual(JSON.parse(me.body), { user: null, entitlements: [] });
+      assert.equal(me.headers['cache-control'], 'no-store');
+      for (const response of [config, me]) {
+        for (const [name, value] of Object.entries(API_HEADERS)) assert.equal(response.headers[name], value, name);
+        assert.equal(response.headers['strict-transport-security'], want('/')['strict-transport-security']);
+        // None of the site's own headers beside the API's: a browser reads the last of two.
+        for (const name of ['permissions-policy', 'x-frame-options', 'cross-origin-opener-policy']) assert.equal(response.headers[name], undefined, name);
+      }
+      // The sign-in starts with the kit's redirect and cookie, both through the proxy untouched,
+      // and the address Google is to send the visitor back to is the proxy's, from APP_URL.
+      const started = await get(`${origin}/api/auth/google/start?return=%2F`);
+      assert.equal(started.status, 302);
+      const google = new URL(started.headers.location);
+      assert.equal(`${google.origin}${google.pathname}`, 'https://accounts.google.com/o/oauth2/v2/auth');
+      assert.equal(google.searchParams.get('redirect_uri'), `${appUrl}api/auth/google/callback`);
+      assert.match(String(started.headers['set-cookie']), /^__Host-multidcheckers-oauth=[^;]+;.*HttpOnly/);
+      assert.deepEqual(fakes.unexpected, []);
+      assert.deepEqual(logs, []);
+    } finally {
+      await api.close();
+      fs.rmSync(data, { recursive: true, force: true });
+    }
   });
 }
 
@@ -326,6 +393,16 @@ async function apacheChecks() {
         assert.equal(response.headers[name], want('/')[name], `${p}: ${name}`);
       }
     }
+  });
+
+  await check('Apache: api/ is the not-found page, since .htaccess cannot proxy to the API', async () => {
+    // mod_proxy is server configuration (README, "Sign-in and the shop"). The page reads the 404 as
+    // no API, and draws no sign-in and no shop.
+    const response = await get(`${origin}/api/me`, proxied);
+    assert.equal(response.status, 404);
+    assert.ok(response.body.includes(NOT_FOUND));
+    sameHeaders('Apache', response, '/404.html');
+    assert.deepEqual(problems, []);
   });
 
   await check('Apache: a missing name under /_expo/static/ is a 404 to revalidate, not one to keep a year', async () => {

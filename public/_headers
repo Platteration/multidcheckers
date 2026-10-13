@@ -14,7 +14,10 @@
 #                       styles at all. No 'unsafe-inline'.
 #   img-src 'self'      the favicon.
 #   media-src 'self'    the sound effects, played through <audio>.
-#   connect-src 'none'  the game makes no network request.
+#   connect-src 'self'  the site's own api/ and nothing else: GET api/config on load, and api/me
+#                       and the account's POSTs once api/config says sign-in or the shop is on
+#                       (server/kit, on Cloudflare Pages or behind nginx). Google and Stripe are
+#                       top-level navigations, which no directive here governs.
 #   frame-ancestors 'none'   nothing is meant to frame the game (clickjacking).
 #   require-trusted-types-for 'script'; trusted-types 'none'   nothing writes HTML from a string.
 # Referrer-Policy is no-referrer because a game code travels in the address: in the fragment of the
@@ -26,7 +29,7 @@
 # Share…: it is not listed because Chromium on Linux does not know the name and warns.
 
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; require-trusted-types-for 'script'; trusted-types 'none'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer

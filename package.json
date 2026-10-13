@@ -38,7 +38,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "node scripts/build-web.mjs",
-    "test": "jest",
+    "test": "node --test server/kit/selftest.mjs server/api.test.mjs && jest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:conventions": "node --test test/conventions.mjs",

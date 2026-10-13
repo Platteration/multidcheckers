@@ -1,7 +1,10 @@
 // The test host for the built site: serves it under a sub-path, the way a GitHub Pages project
 // site is served, and answers the way Netlify reads the site's own _headers and _redirects, so
-// the browser suite runs the game under the headers as that file writes them. Test tooling only;
-// it is never published, and it listens on loopback alone.
+// the browser suite runs the game under the headers as that file writes them. Given an `api`, it
+// also runs the site's API for `<base>/api/*` the way Cloudflare Pages runs
+// functions/api/[[path]].js (_routes.json): before the static files and the _redirects rules, and
+// with none of _headers' headers, which Cloudflare does not apply to a Function's response (the
+// API sends its own). Test tooling only; it is never published, and it listens on loopback alone.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -86,15 +89,17 @@ export const REQUEST_LINE_LIMIT = 8190;
 /**
  * Serves `root` at http://127.0.0.1:<port><base>/. Every request is recorded; one outside the
  * base lands in `outside`, and a path two header rules both set a header for in `twice`. With
- * `headers: false` it sends none of _headers, as GitHub Pages sends none.
+ * `headers: false` it sends none of _headers, as GitHub Pages sends none. `api`, a node:http
+ * request listener, answers everything under `<base>/api/` (`apiRequests`).
  */
-export function serveSite({ root, base, headers: sendHeaders = true }) {
+export function serveSite({ root, base, headers: sendHeaders = true, api = null }) {
   const site = path.resolve(root);
   const headerRules = parseHeaders(fs.readFileSync(path.join(site, '_headers'), 'utf8'));
   const redirectRules = parseRedirects(fs.readFileSync(path.join(site, '_redirects'), 'utf8'));
   const outside = [];
   const twice = [];
   const requests = [];
+  const apiRequests = [];
 
   const send = (res, sitePath, status, file) => {
     const { headers, twice: doubled } = headersFor(sendHeaders ? headerRules : [], sitePath);
@@ -126,6 +131,11 @@ export function serveSite({ root, base, headers: sendHeaders = true }) {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('outside the site');
       return;
     }
+    if (api && pathname.startsWith(`${base}/api/`)) {
+      apiRequests.push(`${req.method} ${pathname}`);
+      api(req, res);
+      return;
+    }
     let sitePath;
     try {
       sitePath = decodeURIComponent(pathname.slice(base.length));
@@ -149,7 +159,7 @@ export function serveSite({ root, base, headers: sendHeaders = true }) {
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address();
-      resolve({ server, origin: `http://127.0.0.1:${port}`, url: `http://127.0.0.1:${port}${base}/`, outside, twice, requests });
+      resolve({ server, origin: `http://127.0.0.1:${port}`, url: `http://127.0.0.1:${port}${base}/`, outside, twice, requests, apiRequests, hasApi: api !== null });
     });
   });
 }
