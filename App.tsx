@@ -68,13 +68,15 @@ export default function App() {
   // a stored record ever throws on its way through a provider; the inner one
   // keeps the providers mounted - and with them the theme and the settings -
   // for everything that throws under them, which is almost everything.
+  // The theme sits below the account and what it owns: a ✦ look is drawn only while it is owned
+  // (drawnLook in src/app/theme.tsx).
   return (
     <ErrorBoundary key={`shell-${generation}`} onReset={startOver}>
       <SettingsProvider>
-        <ThemeProvider>
-          <ProgressProvider>
-            <AccountProvider>
-              <EntitlementsProvider>
+        <AccountProvider>
+          <EntitlementsProvider>
+            <ThemeProvider>
+              <ProgressProvider>
                 <StatsProvider>
                   <SafeAreaProvider>
                     <ErrorBoundary key={generation} onReset={startOver}>
@@ -82,10 +84,10 @@ export default function App() {
                     </ErrorBoundary>
                   </SafeAreaProvider>
                 </StatsProvider>
-              </EntitlementsProvider>
-            </AccountProvider>
-          </ProgressProvider>
-        </ThemeProvider>
+              </ProgressProvider>
+            </ThemeProvider>
+          </EntitlementsProvider>
+        </AccountProvider>
       </SettingsProvider>
     </ErrorBoundary>
   );

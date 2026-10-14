@@ -179,8 +179,47 @@ export async function pollFor(entitlement: string, readMe: () => Promise<Me | nu
   return { held: false, me };
 }
 
-/** How `POST api/checkout` ended, as the page reads it. */
-export type CheckoutResult = 'redirecting' | 'signin' | 'owned' | 'unavailable' | 'busy' | 'failed';
+/**
+ * How `POST api/checkout` ended, as the page reads it. `pending` is a 409 whose body says
+ * `payment_pending`: a Checkout for the pack has been paid and its webhook has not arrived. The kit
+ * this repository carries never says it (server/kit at 7f4e583 reads every second Buy as a new
+ * Checkout); the kit's later copy does, and a page that took it for `owned` would draw Buy again
+ * with nothing said.
+ */
+export type CheckoutResult = 'redirecting' | 'signin' | 'owned' | 'pending' | 'unavailable' | 'busy' | 'failed';
+
+/**
+ * The website's one record outside AsyncStorage, in the tab's own sessionStorage: when Checkout
+ * sent this tab back with a payment `api/me` had not reported yet, as `{ "at": <ms> }`. Read by
+ * account.tsx through the client, so that a reload within PENDING_MS (the page's own words say
+ * "reload to check") still draws "Payment received — processing" where Buy was, rather than a
+ * Buy whose second press would make a second Checkout the visitor could pay. It goes once the
+ * purchase is reported, or once nobody is signed in; it unlocks nothing.
+ */
+export const SESSION_KEYS = {
+  purchasePending: 'multidcheckers.purchasePending.v1',
+} as const;
+
+/** How long a payment on its way keeps Buy away after a reload: the webhook's delay, and then some. */
+export const PENDING_MS = 10 * 60 * 1000;
+
+/**
+ * Whether a stored `{ "at": <ms> }` marks a payment on its way at `now`: a whole number of
+ * milliseconds no later than now and less than PENDING_MS before it. Anything else (no record,
+ * text that is not JSON, another shape, a time in the future) is no payment on its way.
+ */
+export function pendingAt(raw: string | null, now: number): boolean {
+  if (raw === null) return false;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!isRecord(value)) return false;
+  const at = value.at;
+  return typeof at === 'number' && Number.isSafeInteger(at) && now - at >= 0 && now - at < PENDING_MS;
+}
 
 /**
  * The website's account and shop, as a platform provides them. The web build's talks to the
@@ -203,6 +242,12 @@ export interface AccountClient {
   checkout(product: string): Promise<CheckoutResult>;
   /** What the address said on arrival, read once and taken out of it. */
   takeLanding(): Landing;
+  /** Notes in this tab that a payment is on its way (SESSION_KEYS.purchasePending). */
+  holdPurchase(): void;
+  /** Whether this tab noted a payment on its way less than PENDING_MS ago. */
+  purchaseHeld(): boolean;
+  /** Forgets that note: the purchase is reported, or nobody is signed in. */
+  releasePurchase(): void;
 }
 
 /** The words the account and the shop say, the same in every app that carries the kit. */
@@ -219,6 +264,8 @@ export const WORDS = {
   owned: 'Owned',
   thanks: (name: string) => `Thank you — ${name} is unlocked.`,
   paymentPending: 'Payment received. It can take a minute to appear — reload to check.',
+  /** In place of Buy while a payment the visitor made is on its way. */
+  processing: 'Payment received — processing',
   dismiss: 'Dismiss',
 } as const;
 
@@ -226,7 +273,7 @@ export const WORDS = {
 export const ACCOUNT_NOTES = {
   deleteTitle: 'Delete account?',
   deleteBody:
-    'This deletes your account on this site, and your purchases with it: the Supporter pack stops being unlocked here. The payment itself stays with Stripe. This cannot be undone.',
+    'This deletes your account on this site, and your purchases with it: the Supporter pack stops being unlocked here. The payment itself stays with Stripe, with the account id it was made under. This cannot be undone.',
   deleteConfirm: 'Delete account',
   deleteCancel: 'Keep my account',
   deleteFailed: 'The account could not be deleted. Try again.',
@@ -240,4 +287,4 @@ export const ACCOUNT_NOTES = {
 export const PRIVACY_OFFLINE = 'Nothing leaves your device. There is no server, no account and no analytics; a game code goes only where you send it.';
 /** ...and on a website whose api/ offers sign-in. */
 export const PRIVACY_WITH_ACCOUNT =
-  "Nothing leaves your device unless you sign in or buy. Signing in with Google tells this site an account id and your email address; a purchase is paid through Stripe, which handles the payment. The site keeps the account id, what was bought and Stripe's customer id, and your email address only while you are signed in. There are no analytics; a game code goes only where you send it.";
+  "Nothing leaves your device unless you sign in or buy. Signing in with Google tells this site an account id and your email address; a purchase is paid through Stripe, which handles the payment and is told that account id with it. The site keeps the account id, what was bought and Stripe's customer id, and your email address only while you are signed in. There are no analytics; a game code goes only where you send it.";

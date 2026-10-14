@@ -46,6 +46,21 @@ const WEB_VIBRATION_HINT = 'A browser cannot vibrate for the game; the phone app
 /** The About card's sentence on a site with no account, and on one with: src/app/accountModel.ts. */
 const PRIVACY_OFFLINE = 'Nothing leaves your device. There is no server, no account and no analytics; a game code goes only where you send it.';
 const PRIVACY_WITH_ACCOUNT = /^Nothing leaves your device unless you sign in or buy\. Signing in with Google tells this site an account id/;
+/** What Extras draws where Buy was while a payment is on its way (WORDS.processing), and the tab's note of it. */
+const PROCESSING = 'Payment received — processing';
+const PENDING_KEY = 'multidcheckers.purchasePending.v1';
+/** The edge of the ✦ Forest board and of the default Walnut one (src/ui/theme.ts), as a computed style writes them. */
+const FOREST_BOARD = 'rgb(47, 74, 44)';
+const CLASSIC_BOARD = 'rgb(90, 58, 38)';
+/**
+ * Whether the big board is drawn in that skin: the edge of the frame two levels above its a8
+ * square (src/ui/CheckerBoard.tsx). Not any element in that colour: the Look row's swatches carry
+ * every skin's squares.
+ */
+const drawn = (color) => {
+  const frame = document.querySelector('[aria-label="a8"], [aria-label^="a8, "]')?.parentElement?.parentElement;
+  return !!frame && getComputedStyle(frame).borderTopColor === color;
+};
 /** The headers server/kit sends on every answer of its own (server/kit/http.js, API_HEADERS). */
 const API_HEADERS = {
   'x-content-type-options': 'nosniff',
@@ -623,10 +638,18 @@ try {
       const back = p.waitForResponse((r) => r.url() === `${shop.url}?purchase=success`);
       await press(p, 'Buy');
       // Back from Checkout: the address loses its ?purchase=success, and the page asks api/me
-      // until the purchase shows. It shows only once Stripe's signed webhook has said so.
+      // until the purchase shows. It shows only once Stripe's signed webhook has said so: until
+      // then no thank-you, and where Buy was the pack says the payment is on its way, so that a
+      // second press cannot start a second Checkout to pay.
       await back;
       await p.waitForFunction(() => location.search === '');
       assert.equal(checkouts.length, 1);
+      await openFromMenu(p, 'Extras');
+      await p.getByText(PROCESSING, { exact: true }).waitFor();
+      assert.equal(await button(p, 'Buy').count(), 0);
+      assert.equal(await p.getByText(/Thank you/).count(), 0);
+      assert.equal(await p.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? 'null')?.at > 0, PENDING_KEY), true);
+      await press(p, 'Close');
       const delivery = signedDelivery(fakes.paid(checkouts[0]));
       const hook = await fetch(`${shop.url}api/webhooks/stripe`, {
         method: 'POST',
@@ -635,6 +658,7 @@ try {
       });
       assert.equal(hook.status, 200);
       await p.getByText('Thank you — Supporter pack is unlocked.').waitFor({ timeout: 20000 });
+      assert.equal(await p.evaluate((key) => sessionStorage.getItem(key), PENDING_KEY), null);
       await title(true).waitFor();
       await press(p, 'Dismiss');
       await openFromMenu(p, 'Extras');
@@ -643,14 +667,21 @@ try {
       await press(p, 'Close');
       await settings();
       await press(p, 'Forest');
+      await p.waitForFunction(drawn, FOREST_BOARD);
       await press(p, 'Sign out');
       await button(p, 'Sign in with Google').waitFor();
+      // Signed out, the pack is no longer the visitor's: the board is drawn as the default again,
+      // and the choice stays theirs for when it is.
+      await p.waitForFunction(drawn, CLASSIC_BOARD);
+      assert.equal(await p.evaluate(drawn, FOREST_BOARD), false);
+      await button(p, '✦ Forest').waitFor();
       await press(p, 'Done');
       await title(false).waitFor();
 
-      // The purchase is the account's: signing in again brings it back.
+      // The purchase is the account's: signing in again brings it back, and the board with it.
       await signIn();
       await title(true).waitFor();
+      await p.waitForFunction(drawn, FOREST_BOARD);
 
       // Deleting the account takes the purchase with it, after asking.
       await settings();
@@ -664,6 +695,36 @@ try {
       await title(false).waitFor();
       await openFromMenu(p, 'Extras');
       await button(p, 'Buy').waitFor();
+
+      // Paid again, and the page reloaded before the webhook: the tab remembers the payment, so
+      // Buy stays away (the kit carried here would start a second Checkout for it), until the
+      // webhook is in and api/me reports the pack.
+      const backAgain = p.waitForResponse((r) => r.url() === `${shop.url}?purchase=success`);
+      await press(p, 'Buy');
+      await backAgain;
+      await p.waitForFunction(() => location.search === '');
+      assert.equal(checkouts.length, 2);
+      // The tab notes the payment once api/me has said who is signed in, a moment after the
+      // address is cleaned: reload only once it has.
+      await p.waitForFunction((key) => sessionStorage.getItem(key) !== null, PENDING_KEY);
+      await p.reload();
+      await button(p, 'Menu').waitFor();
+      await openFromMenu(p, 'Extras');
+      await p.getByText(PROCESSING, { exact: true }).waitFor();
+      assert.equal(await button(p, 'Buy').count(), 0);
+      await press(p, 'Close');
+      const again = signedDelivery(fakes.paid(checkouts[1]));
+      const hookAgain = await fetch(`${shop.url}api/webhooks/stripe`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'stripe-signature': again.signature },
+        body: again.body,
+      });
+      assert.equal(hookAgain.status, 200);
+      await p.reload();
+      await title(true).waitFor();
+      await openFromMenu(p, 'Extras');
+      await p.getByText('Owned', { exact: true }).waitFor();
+      assert.equal(await p.evaluate((key) => sessionStorage.getItem(key), PENDING_KEY), null);
       await press(p, 'Close');
 
       // A sign-in Google refuses comes back to the site, which says so once and cleans the address.
@@ -679,12 +740,21 @@ try {
       await button(p, 'Menu').waitFor();
       await p.waitForFunction(() => location.search === '');
       assert.equal(await p.getByRole('alert').count(), 0);
+      // Anyone can open the address Checkout returns to. Signed out, it is taken out of the
+      // address and nothing more: no line about a payment, and no api/me asked after the first.
+      const before = shop.apiRequests.length;
+      await p.goto(`${shop.url}?purchase=success`);
+      await button(p, 'Menu').waitFor();
+      await p.waitForFunction(() => location.search === '');
+      await p.waitForTimeout(4000);
+      assert.deepEqual(shop.apiRequests.slice(before), [`GET ${BASE}/api/config`, `GET ${BASE}/api/me`]);
+      assert.equal(await p.getByRole('alert').count(), 0);
 
       // Every page that left the site went to Stripe's Checkout, which the browser answered
       // itself; Google's consent was answered before the browser went there. Nothing reached either.
       assert.deepEqual(p.left, checkouts);
       assert.equal(answered.filter((u) => u.startsWith(GOOGLE)).length, 4);
-      assert.equal(answered.length, 5);
+      assert.equal(answered.length, 6);
       assert.deepEqual(fakes.unexpected, []);
       assert.deepEqual(logs, []);
       assert.deepEqual(shop.outside, []);

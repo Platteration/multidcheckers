@@ -14,8 +14,8 @@ import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import catalogue from './catalogue.js';
 import { createFakes, envFor, signedDelivery } from './fakes.mjs';
-import { priceVariable, validateCatalogue } from './kit/app.js';
-import { pagesHandler } from './kit/cloudflare.js';
+import { createApp, priceVariable, validateCatalogue } from './kit/app.js';
+import { kvStore, pagesHandler } from './kit/cloudflare.js';
 import { start } from './start.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -214,17 +214,21 @@ describe('a host of its own: server/start.mjs through the Node adapter', () => {
     assert.equal(asked.get('success_url'), `${APP_URL}?purchase=success`);
     assert.equal(asked.get('cancel_url'), `${APP_URL}?purchase=cancelled`);
 
-    // Coming back from Checkout grants nothing: only Stripe's signed word does.
+    // Coming back from Checkout grants nothing: only Stripe's signed word does. Each delivery is
+    // posted as Stripe posts it, its exact bytes under its own Stripe-Signature header, so what is
+    // refused is a signature made with another secret, not a delivery with none.
     assert.deepEqual((await visitor.me()).entitlements, []);
+    /** @param {{ body: string, signature: string }} delivery */
+    const deliver = (delivery) =>
+      realFetch(new URL('api/webhooks/stripe', api.url), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'stripe-signature': delivery.signature },
+        body: delivery.body,
+      });
     const forged = signedDelivery(fakes.paid(url), { secret: 'whsec_notTheEndpointsSecret000' });
-    const refused = await visitor.send('POST', 'api/webhooks/stripe', { json: JSON.parse(forged.body) });
-    assert.equal(refused.status, 400);
-    const delivery = signedDelivery(fakes.paid(url));
-    const hook = await realFetch(new URL('api/webhooks/stripe', api.url), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'stripe-signature': delivery.signature },
-      body: delivery.body,
-    });
+    assert.equal((await deliver(forged)).status, 400);
+    assert.deepEqual((await visitor.me()).entitlements, []);
+    const hook = await deliver(signedDelivery(fakes.paid(url)));
     assert.equal(hook.status, 200);
     assert.deepEqual(await visitor.me(), { user: { email: 'ada@example.com' }, entitlements: ['supporter'] });
     assert.equal((await visitor.send('POST', 'api/checkout', { json: { product: 'supporter' } })).status, 409);
@@ -256,6 +260,89 @@ describe('a host of its own: server/start.mjs through the Node adapter', () => {
       });
       assert.equal(response.status, 403, String(origin));
     }
+  });
+});
+
+describe("what README and About say Stripe is told, and what Delete account leaves", () => {
+  // The kit over a Workers KV namespace whose every key, value and lifetime can be read back:
+  // createApp, as functions/api/[[path]].js runs it, with the fakes as its fetch.
+  const APP = 'https://mdck.example/';
+
+  it('tells Stripe the account id with a payment and never the email, and deletion leaves only the hour’s count of Buy presses', async () => {
+    const fakes = await createFakes();
+    /** @type {Map<string, { value: string, ttl: number | undefined }>} */
+    const data = new Map();
+    const namespace = {
+      get: async (/** @type {string} */ key) => (data.has(key) ? JSON.parse(data.get(key)?.value ?? 'null') : null),
+      put: async (/** @type {string} */ key, /** @type {string} */ value, /** @type {{ expirationTtl?: number } | undefined} */ options) =>
+        void data.set(key, { value, ttl: options?.expirationTtl }),
+      delete: async (/** @type {string} */ key) => void data.delete(key),
+    };
+    const app = createApp({ catalogue, env: envFor(APP), store: kvStore(() => namespace), fetch: fakes.fetch, log: () => {} });
+    /** @type {Map<string, string>} */
+    const jar = new Map();
+    /** @param {string} method @param {string} target @param {unknown} [json] */
+    const send = async (method, target, json) => {
+      const headers = new Headers();
+      if (jar.size) headers.set('cookie', [...jar].map(([name, value]) => `${name}=${value}`).join('; '));
+      if (method !== 'GET') headers.set('origin', 'https://mdck.example');
+      if (json !== undefined) headers.set('content-type', 'application/json');
+      const response = await app.handle(new Request(new URL(target, APP), { method, headers, body: json === undefined ? undefined : JSON.stringify(json) }));
+      for (const cookie of response.headers.getSetCookie()) {
+        const [pair = ''] = cookie.split(';');
+        const name = pair.slice(0, pair.indexOf('='));
+        if (/;\s*Max-Age=0(?:;|$)/i.test(cookie)) jar.delete(name);
+        else jar.set(name, pair.slice(pair.indexOf('=') + 1));
+      }
+      return response;
+    };
+    const started = await send('GET', 'api/auth/google/start?return=%2F');
+    assert.equal((await send('GET', fakes.consent(started.headers.get('location') ?? '', { sub: '1001', email: 'ada@example.com' }).href)).status, 302);
+    const checkout = await send('POST', 'api/checkout', { product: 'supporter' });
+    assert.equal(checkout.status, 200);
+    const { url } = /** @type {{ url: string }} */ (await checkout.json());
+
+    // What Stripe is told with the payment: the account id, as the reference and in the metadata
+    // its PaymentIntent carries, and nothing that names the visitor otherwise.
+    const asked = fakes.sessions.get(new URL(url).pathname.split('/').pop() ?? '');
+    assert.ok(asked);
+    assert.equal(asked.get('client_reference_id'), 'google:1001');
+    assert.equal(asked.get('metadata[user]'), 'google:1001');
+    assert.equal(asked.get('payment_intent_data[metadata][user]'), 'google:1001');
+    assert.equal([...asked.values()].filter((v) => v.includes('ada@')).length, 0);
+    assert.ok(![...asked.keys()].some((k) => /email/.test(k)));
+
+    const event = fakes.paid(url);
+    const delivery = signedDelivery(event);
+    const hook = await app.handle(
+      new Request(new URL('api/webhooks/stripe', APP), { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': delivery.signature }, body: delivery.body }),
+    );
+    assert.equal(hook.status, 200);
+    assert.deepEqual(/** @type {{ entitlements: string[] }} */ (await (await send('GET', 'api/me')).json()).entitlements, ['supporter']);
+
+    assert.equal((await send('DELETE', 'api/me')).status, 204);
+    const object = /** @type {{ payment_intent: string, customer: string }} */ (/** @type {{ data: { object: unknown } }} */ (event).data.object);
+    const naming = [...data].filter(([key, { value }]) =>
+      ['google:1001', 'ada@example.com', object.payment_intent, object.customer].some((name) => key.includes(name) || value.includes(name)),
+    );
+    // The hour's count of Buy presses, kept so that deleting is no way round the limit on them,
+    // and gone within two hours.
+    assert.deepEqual(
+      naming.map(([key]) => key.replace(/:\d+$/, ':<hour>')),
+      ['multidcheckers:test:ratelimit:google:1001:<hour>'],
+    );
+    assert.ok((naming[0]?.[1].ttl ?? Infinity) <= 2 * 3600);
+    assert.deepEqual(fakes.unexpected, []);
+
+    // The sentences that say so, word for word.
+    const readme = read('README.md').replace(/\s+/g, ' ');
+    assert.match(readme, /which handles the payment and is told the account id with it \(as the Checkout session's reference and in the payment's metadata\), but not the email address\./);
+    assert.match(readme, /Delete account removes all of it but the payment, which stays with Stripe under that account id, and a count of the hour's Buy presses, which names the account id and goes within two hours\./);
+    const listing = read('docs/store-listing.md').replace(/\s+/g, ' ');
+    assert.match(listing, /Stripe handles the payment when they buy and is told the account id with it/);
+    const model = read('src/app/accountModel.ts');
+    assert.match(model, /a purchase is paid through Stripe, which handles the payment and is told that account id with it\./);
+    assert.match(model, /The payment itself stays with Stripe, with the account id it was made under\./);
   });
 });
 

@@ -9,7 +9,7 @@
  * and the page asks for nothing more: no sign-in and no shop are drawn, nothing is stored, and
  * nothing is retried.
  */
-import { AccountClient, ApiConfig, CheckoutResult, Landing, Me, landingOf, readApiConfig, readMe } from './accountModel';
+import { AccountClient, ApiConfig, CheckoutResult, Landing, Me, SESSION_KEYS, landingOf, pendingAt, readApiConfig, readMe } from './accountModel';
 
 /** The one address the page leaves for to pay: Stripe's hosted Checkout. */
 export const CHECKOUT_ORIGIN = 'https://checkout.stripe.com';
@@ -48,6 +48,16 @@ async function get(route: string, init: RequestInit = {}): Promise<unknown> {
     return await json(await fetch(apiUrl(route), { ...init, headers: { accept: 'application/json' }, credentials: 'same-origin' }));
   } catch {
     return undefined;
+  }
+}
+
+/** The `error` a refusal's JSON body names, or null when it names none. */
+async function refusalOf(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.json();
+    return typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string' ? body.error : null;
+  } catch {
+    return null;
   }
 }
 
@@ -93,7 +103,11 @@ export const accountClient: AccountClient = {
     const response = await send('POST', 'checkout', { product });
     if (!response) return 'failed';
     if (response.status === 401) return 'signin';
-    if (response.status === 409) return 'owned';
+    if (response.status === 409) {
+      // Owned, or (the kit's later copy) a Checkout for it paid and not yet recorded.
+      const refusal = await refusalOf(response);
+      return refusal === 'payment_pending' ? 'pending' : 'owned';
+    }
     if (response.status === 404) return 'unavailable';
     if (response.status === 429) return 'busy';
     const body = await json(response);
@@ -107,5 +121,31 @@ export const accountClient: AccountClient = {
     const { landing, without } = landingOf(window.location.href);
     if (without !== null && typeof window.history?.replaceState === 'function') window.history.replaceState(window.history.state, '', without);
     return landing;
+  },
+
+  // The tab's own note of a payment on its way. sessionStorage throws where the browser keeps no
+  // site data, and is absent from some embedded views: either is no note, never an error.
+  holdPurchase(): void {
+    try {
+      window.sessionStorage.setItem(SESSION_KEYS.purchasePending, JSON.stringify({ at: Date.now() }));
+    } catch {
+      // Nothing kept: the page still says "processing" until it is reloaded.
+    }
+  },
+
+  purchaseHeld(): boolean {
+    try {
+      return pendingAt(window.sessionStorage.getItem(SESSION_KEYS.purchasePending), Date.now());
+    } catch {
+      return false;
+    }
+  },
+
+  releasePurchase(): void {
+    try {
+      window.sessionStorage.removeItem(SESSION_KEYS.purchasePending);
+    } catch {
+      // Nothing to forget.
+    }
   },
 };

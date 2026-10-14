@@ -24,7 +24,11 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest, which becomes Ubuntu 26.04 from 2026-10-19: the locked Playwright (1.56.1)
+    # has no Chromium build for 26.04, so `playwright install` would fail there.
+    # src/app/__tests__/ci.test.ts asks that Playwright's own CLI whether it has a build for the
+    # release named here, so raising Playwright and then the runner is one change.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

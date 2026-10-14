@@ -307,8 +307,30 @@ describe('the response headers', () => {
       { words: 'proxy_set_header Connection ""' },
       { words: 'client_max_body_size 1m' },
       { words: 'proxy_read_timeout 30s' },
+      // The API not running (502) or not answering (504): the site's not-found page, not nginx's
+      // own, which would go out with this location's one header. Nothing intercepts the API's own
+      // answers.
+      { words: 'error_page 502 504 /404.html' },
       hsts,
     ]);
+    expect(everyStatement(readNginx(NGINX).top).filter((s) => s.words.startsWith('proxy_intercept_errors'))).toEqual([]);
+  });
+
+  it("answer an API that is not running, and /api, with the site's not-found page and every header", () => {
+    // The page the API's error_page names is served by a location that adds no header of its own,
+    // so the server block's all go with it (e2e/hosts.mjs runs nginx so: 502, and every header).
+    const { site } = readNginx(NGINX);
+    expect(site.body!.filter((s) => s.words === 'location = /404.html').map((s) => s.body)).toEqual([[{ words: 'internal' }]]);
+    // Without its slash, /api would be answered from the API's location with nginx's own 301 and
+    // that location's one header.
+    expect(site.body!.filter((s) => s.words === 'location = /api').map((s) => s.body)).toEqual([[{ words: 'return 404' }]]);
+    expect(site.body!.map((s) => s.words)).toContain('error_page 404 /404.html');
+    // Apache cannot proxy from .htaccess: README gives the virtual host's lines, the error pages
+    // beside the ProxyPass (without them, Apache's own 503 page and none of the site's headers;
+    // e2e/hosts.mjs reads these lines out of README and runs Apache with them).
+    expect(read('README.md')).toContain(
+      ['  ```apache', '  ProxyPass "/api/" "http://127.0.0.1:8788/api/"', '  ErrorDocument 502 /404.html', '  ErrorDocument 503 /404.html', '  ErrorDocument 504 /404.html', '  ```'].join('\n'),
+    );
   });
 
   it('deny every feature but the sounds and the clipboard', () => {
@@ -575,6 +597,7 @@ describe('the build', () => {
     fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
     fs.copyFileSync(path.join(root, 'scripts', 'build-web.mjs'), path.join(repo, 'scripts', 'build-web.mjs'));
     fs.cpSync(path.join(root, 'public'), path.join(repo, 'public'), { recursive: true });
+    fs.cpSync(path.join(root, 'functions'), path.join(repo, 'functions'), { recursive: true });
     fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"sandbox","private":true}');
     const expo = path.join(repo, 'node_modules', 'expo');
     fs.mkdirSync(path.join(expo, 'bin'), { recursive: true });
@@ -590,9 +613,10 @@ describe('the build', () => {
         "fs.writeFileSync(path.join(out, 'metadata.json'), '{}');",
       ].join('\n'),
     );
+    let printed = '';
     const run = (...args: string[]) => {
       try {
-        execFileSync(process.execPath, [path.join(repo, 'scripts', 'build-web.mjs'), ...args], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+        printed = String(execFileSync(process.execPath, [path.join(repo, 'scripts', 'build-web.mjs'), ...args], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] }));
         return { status: 0, stderr: '' };
       } catch (e) {
         const error = e as { status: number; stderr: Buffer };
@@ -603,7 +627,7 @@ describe('the build', () => {
       const file = path.join(repo, 'exporter-ran.json');
       return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
     };
-    return { dir, repo, run, exporter };
+    return { dir, repo, run, exporter, printed: () => printed };
   }
 
   it.each([
@@ -635,15 +659,43 @@ describe('the build', () => {
     fs.rmSync(box.dir, { recursive: true, force: true });
   });
 
-  it.each([
-    [[], '/api/*'],
-    [['--base', '/multidcheckers'], '/multidcheckers/api/*'],
-  ])('with %j, has Cloudflare Pages run the API for %s and for nothing else', (args, route) => {
+  it('has Cloudflare Pages run the API for /api/* and for nothing else', () => {
     // functions/api/[[path]].js is the sign-in and shop API (server/kit). With no _routes.json
     // every request to the site would invoke it, the bundle and the sounds included.
+    expect(fs.existsSync(path.join(root, 'functions', 'api', '[[path]].js'))).toBe(true);
     const box = sandbox();
-    expect(box.run(...args)).toEqual({ status: 0, stderr: '' });
-    expect(JSON.parse(fs.readFileSync(path.join(box.repo, 'dist-web', '_routes.json'), 'utf8'))).toEqual({ version: 1, include: [route], exclude: [] });
+    expect(box.run()).toEqual({ status: 0, stderr: '' });
+    expect(JSON.parse(fs.readFileSync(path.join(box.repo, 'dist-web', '_routes.json'), 'utf8'))).toEqual({ version: 1, include: ['/api/*'], exclude: [] });
+    fs.rmSync(box.dir, { recursive: true, force: true });
+  });
+
+  it.each([['/multidcheckers'], ['/a/b']])('under %s, writes no _routes.json for a Function the checkout does not have, and says so', (base) => {
+    // Pages routes a Function by its file's path: the entry answers /api/* alone, so a routes file
+    // naming <base>/api/* would send the page's api/config to a Function that is not there, and
+    // the site would run with no sign-in and no shop, and nothing said.
+    const box = sandbox();
+    expect(box.run('--base', base)).toEqual({ status: 0, stderr: '' });
+    expect(fs.existsSync(path.join(box.repo, 'dist-web', '_routes.json'))).toBe(false);
+    expect(box.printed()).toContain(`build-web: no _routes.json: the checkout has no functions${base}/api/[[path]].js to answer ${base}/api/* (Cloudflare Pages serves a site at the root of its domain: build there with no --base)\n`);
+    fs.rmSync(box.dir, { recursive: true, force: true });
+  });
+
+  it('writes the routes for a sub-path once its Function is where Pages looks for it', () => {
+    const box = sandbox();
+    fs.mkdirSync(path.join(box.repo, 'functions', 'multidcheckers', 'api'), { recursive: true });
+    fs.copyFileSync(path.join(root, 'functions', 'api', '[[path]].js'), path.join(box.repo, 'functions', 'multidcheckers', 'api', '[[path]].js'));
+    expect(box.run('--base', '/multidcheckers')).toEqual({ status: 0, stderr: '' });
+    expect(JSON.parse(fs.readFileSync(path.join(box.repo, 'dist-web', '_routes.json'), 'utf8'))).toEqual({ version: 1, include: ['/multidcheckers/api/*'], exclude: [] });
+    expect(box.printed()).not.toContain('no _routes.json');
+    fs.rmSync(box.dir, { recursive: true, force: true });
+  });
+
+  it('writes none at the root either when the checkout has no Function', () => {
+    const box = sandbox();
+    fs.rmSync(path.join(box.repo, 'functions'), { recursive: true, force: true });
+    expect(box.run()).toEqual({ status: 0, stderr: '' });
+    expect(fs.existsSync(path.join(box.repo, 'dist-web', '_routes.json'))).toBe(false);
+    expect(box.printed()).toContain('build-web: no _routes.json: the checkout has no functions/api/[[path]].js to answer /api/*\n');
     fs.rmSync(box.dir, { recursive: true, force: true });
   });
 

@@ -5,7 +5,7 @@
  * native twin in appConfig.test.ts, and the whole flow against the real kit in the browser
  * suite (e2e/run.mjs).
  */
-import { NO_LANDING, POLL, SIGNED_OUT, formatPrice, landingOf, pollFor, readApiConfig, readMe } from '../accountModel';
+import { NO_LANDING, PENDING_MS, POLL, SESSION_KEYS, SIGNED_OUT, formatPrice, landingOf, pendingAt, pollFor, readApiConfig, readMe } from '../accountModel';
 import { accountClient, apiUrl, isCheckoutUrl } from '../accountClient.web';
 
 /** What server/kit answers for this app with everything configured. */
@@ -131,6 +131,23 @@ describe('waiting for a purchase', () => {
   });
 });
 
+describe('a payment on its way, as the tab noted it', () => {
+  const NOW = 1_800_000_000_000;
+
+  it('holds from the moment it was noted until PENDING_MS after', () => {
+    expect(PENDING_MS).toBe(10 * 60 * 1000);
+    for (const age of [0, 1, PENDING_MS - 1]) expect([age, pendingAt(JSON.stringify({ at: NOW - age }), NOW)]).toEqual([age, true]);
+    for (const age of [PENDING_MS, PENDING_MS + 1, -1, -PENDING_MS]) expect([age, pendingAt(JSON.stringify({ at: NOW - age }), NOW)]).toEqual([age, false]);
+  });
+
+  it.each([[null], [''], ['{'], ['null'], ['[]'], ['1800000000000'], ['{"at":"1800000000000"}'], ['{"at":1800000000000.5}'], ['{"at":1799999998999.5}'], ['{"at":null}'], ['{}'], ['{"__proto__":{"at":1800000000000}}'], ['{"at":1e400}']])(
+    'is no payment for %j',
+    (raw) => {
+      expect(pendingAt(raw, NOW)).toBe(false);
+    },
+  );
+});
+
 describe('the web build’s client', () => {
   const PAGE = 'https://games.example/multidcheckers/';
   let fetch: jest.Mock;
@@ -229,6 +246,19 @@ describe('the web build’s client', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [{ error: 'payment_pending' }, 'pending'],
+    [{ error: 'already_owned' }, 'owned'],
+    [{ error: 'subscription_active' }, 'owned'],
+    [{ error: ['payment_pending'] }, 'owned'],
+    ['not json', 'owned'],
+    [undefined, 'owned'],
+  ])('reads a 409 saying %j as %s: only a payment on its way is not one owned', async (body, result) => {
+    fetch.mockImplementationOnce(() => reply(409, body));
+    expect(await accountClient.checkout('supporter')).toBe(result);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it('signs out and deletes with requests that carry no body', async () => {
     fetch.mockImplementation(() => reply(204));
     expect(await accountClient.signOut()).toBe(true);
@@ -252,6 +282,57 @@ describe('the web build’s client', () => {
     href = PAGE;
     expect(accountClient.takeLanding()).toEqual(NO_LANDING);
     expect(replaceState).not.toHaveBeenCalled();
+  });
+
+  describe('the tab’s note of a payment on its way', () => {
+    /** A sessionStorage, or one that throws as a browser keeping no site data does. */
+    const install = (storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | undefined) => {
+      Object.defineProperty(window, 'sessionStorage', { value: storage, configurable: true, writable: true });
+    };
+    const memory = () => {
+      const data = new Map<string, string>();
+      return {
+        data,
+        getItem: (key: string) => data.get(key) ?? null,
+        setItem: (key: string, value: string) => void data.set(key, value),
+        removeItem: (key: string) => void data.delete(key),
+      };
+    };
+
+    it('is written as {at}, read back for PENDING_MS, and forgotten', () => {
+      const storage = memory();
+      install(storage);
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+      try {
+        expect(accountClient.purchaseHeld()).toBe(false);
+        accountClient.holdPurchase();
+        expect([...storage.data]).toEqual([[SESSION_KEYS.purchasePending, '{"at":1800000000000}']]);
+        expect(accountClient.purchaseHeld()).toBe(true);
+        now.mockReturnValue(1_800_000_000_000 + PENDING_MS - 1);
+        expect(accountClient.purchaseHeld()).toBe(true);
+        now.mockReturnValue(1_800_000_000_000 + PENDING_MS);
+        expect(accountClient.purchaseHeld()).toBe(false);
+        accountClient.releasePurchase();
+        expect(storage.data.size).toBe(0);
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it('is no note, and no error, where the browser keeps nothing', () => {
+      const refuse = () => {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      };
+      install({ getItem: refuse, setItem: refuse, removeItem: refuse });
+      expect(() => accountClient.holdPurchase()).not.toThrow();
+      expect(accountClient.purchaseHeld()).toBe(false);
+      expect(() => accountClient.releasePurchase()).not.toThrow();
+      install(undefined);
+      expect(() => accountClient.holdPurchase()).not.toThrow();
+      expect(accountClient.purchaseHeld()).toBe(false);
+      expect(() => accountClient.releasePurchase()).not.toThrow();
+    });
   });
 
   it('knows a Checkout address from everything else', () => {

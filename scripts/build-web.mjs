@@ -16,9 +16,13 @@
 //   - removes metadata.json, the exporter's manifest for EAS Update, which the site never loads;
 //   - writes _routes.json, which tells Cloudflare Pages to run the site's one Function
 //     (functions/api/[[path]].js, the sign-in and shop API of server/kit) for `<base>/api/*` and
-//     nothing else, so a static file never invokes it. The other hosts do not read it: Netlify's
-//     _redirects, Apache's .htaccess and nginx's deploy/nginx.conf refuse it like the other
-//     configurations, and GitHub Pages serves it as a file, as it serves them;
+//     nothing else, so a static file never invokes it; but only where the checkout has the
+//     Function that answers that path (apiEntry): Pages runs a Function by its file's path, so
+//     the entry answers /api/* alone, and a sub-path build's routes file would send
+//     `/<path>/api/*` to a Function that is not there. A --base build without
+//     functions/<path>/api/[[path]].js gets no _routes.json, and says so. The other hosts do not
+//     read it: Netlify's _redirects, Apache's .htaccess and nginx's deploy/nginx.conf refuse it
+//     like the other configurations, and GitHub Pages serves it as a file, as it serves them;
 //   - refuses to finish when the page is not the one public/index.html describes (a later SDK
 //     that stopped reading the template would ship a page with no policy and no safety net).
 import { spawnSync } from 'node:child_process';
@@ -36,8 +40,11 @@ export const BASE = /^(\/(?!\.\.?(?:\/|$))[A-Za-z0-9._~-]+)+$/;
 /** The folders inside the checkout the site may be written to: .gitignore lists each one. */
 export const OUT_FOLDERS = ['dist-web', 'dist', 'web-build'];
 
-/** Every file the site is made of besides the bundle, the sounds and the favicon. */
-export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'robots.txt', '.well-known/security.txt', '_headers', '_redirects', '.htaccess', '.nojekyll', '_routes.json'];
+/**
+ * Every file the site is made of besides the bundle, the sounds and the favicon, and _routes.json,
+ * which only a build whose api/ has a Function to answer it carries (apiEntry).
+ */
+export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'robots.txt', '.well-known/security.txt', '_headers', '_redirects', '.htaccess', '.nojekyll'];
 
 /**
  * Cloudflare Pages' _routes.json for a site under `base` ('' at the root of its domain): the
@@ -46,6 +53,15 @@ export const SITE_FILES = ['index.html', '404.html', 'guard.js', 'site.css', 'ro
  */
 export function routesFor(base) {
   return `${JSON.stringify({ version: 1, include: [`${base}/api/*`], exclude: [] })}\n`;
+}
+
+/**
+ * The Function that would answer `base`'s api/ on Cloudflare Pages ('' at the root), relative to
+ * the checkout: Pages routes a Function by its file's path under functions/, so the entry this
+ * repository keeps, functions/api/[[path]].js, answers /api/* and nothing under a sub-path.
+ */
+export function apiEntry(base) {
+  return `functions${base}/api/[[path]].js`;
 }
 
 /** The Content-Security-Policy the `/*` rule of a _headers file gives every path. */
@@ -133,7 +149,13 @@ function build({ base, out: outArg }) {
   if (run.status !== 0) fail(`expo export exited with ${run.status}`);
 
   fs.rmSync(path.join(out, 'metadata.json'), { force: true });
-  fs.writeFileSync(path.join(out, '_routes.json'), routesFor(base));
+  if (fs.existsSync(path.join(root, apiEntry(base)))) fs.writeFileSync(path.join(out, '_routes.json'), routesFor(base));
+  else {
+    console.log(
+      `build-web: no _routes.json: the checkout has no ${apiEntry(base)} to answer ${base}/api/*` +
+        (base ? ' (Cloudflare Pages serves a site at the root of its domain: build there with no --base)' : ''),
+    );
+  }
   for (const file of ['404.html', '.htaccess']) {
     const target = path.join(out, file);
     fs.writeFileSync(target, withBase(file, fs.readFileSync(target, 'utf8'), base));

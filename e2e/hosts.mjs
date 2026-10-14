@@ -10,9 +10,14 @@
 // nginx also proxies the site's api/ to the sign-in and shop API (server/start.mjs, the kit's
 // Node adapter, here with a fake Google and a fake Stripe handed to it as its `fetch`): this
 // checks that the location reaches it with nothing of the folder's in the way, that its answers
-// leave with the API's own headers and the server block's HSTS alone, and that it is a 502, which
-// the page reads as no API, while the API is not running. Apache's .htaccess cannot proxy, so
-// there api/ is the not-found page.
+// leave with the API's own headers and the server block's HSTS alone, and that while the API is
+// not running it is a 502 with the site's not-found page and every header the site sends (nginx's
+// own error page went out with HSTS alone), which the page reads as no API; /api itself is the
+// not-found page too, where nginx answered its own 301. Apache's .htaccess cannot proxy, so there
+// api/ is the not-found page; with the lines README.md gives the virtual host (a ProxyPass and
+// ErrorDocument 502, 503 and 504, read out of README.md), an API not running is a 503 with the
+// site's not-found page and every header, where Apache's own page carried none, and a running
+// one answers with its own headers.
 //
 // Needs nginx, Apache as Debian and Ubuntu lay it out (/usr/sbin/apache2, its modules in
 // /usr/lib/apache2/modules) and openssl. GitHub's ubuntu-24.04 runner has all of them, at the
@@ -84,10 +89,10 @@ const freePort = () =>
   });
 
 /** One request, answered: status, headers and body. A self-signed certificate is accepted. */
-const get = (url, headers = {}) =>
+const get = (url, headers = {}, method = 'GET') =>
   new Promise((resolve, reject) => {
     const lib = url.startsWith('https:') ? https : http;
-    const req = lib.get(url, { headers, rejectUnauthorized: false, agent: false }, (res) => {
+    const req = lib.request(url, { method, headers, rejectUnauthorized: false, agent: false }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => (body += chunk));
@@ -95,6 +100,7 @@ const get = (url, headers = {}) =>
     });
     req.on('error', reject);
     req.setTimeout(10000, () => req.destroy(new Error(`${url}: no answer in 10 s`)));
+    req.end();
   });
 
 async function waitFor(url, headers, log) {
@@ -125,6 +131,9 @@ const PLANTED = {
   'assets/.DS_Store': 'x',
   // A folder in the site's place that the API's location must never serve from.
   'api/config': '{"planted":true}\n',
+  // What a build for the root of its domain carries for Cloudflare Pages (scripts/build-web.mjs):
+  // the build tested here is under a sub-path and has none, so it is planted to be refused.
+  '_routes.json': '{"version":1,"include":["/api/*"],"exclude":[]}\n',
 };
 for (const [file, text] of Object.entries(PLANTED)) {
   fs.mkdirSync(path.dirname(path.join(site, file)), { recursive: true });
@@ -138,7 +147,7 @@ const sound = `/assets/assets/sounds/${fs.readdirSync(path.join(site, 'assets/as
 /** The paths of the site, each a 200 with exactly the headers _headers gives it. */
 const SERVED = ['/', '/index.html', '/guard.js', '/site.css', '/favicon.ico', '/robots.txt', '/.well-known/security.txt', bundle, sound];
 /** The files planted above, the hosts' configurations and the folders with no page: the not-found page. */
-const REFUSED = [...Object.keys(PLANTED).filter((f) => !f.startsWith('api/')).map((f) => `/${f}`), '/_headers', '/_redirects', '/_routes.json', '/.nojekyll', '/_expo/', '/assets/', '/no/such/page'];
+const REFUSED = [...Object.keys(PLANTED).filter((f) => !f.startsWith('api/')).map((f) => `/${f}`), '/_headers', '/_redirects', '/.nojekyll', '/_expo/', '/assets/', '/no/such/page'];
 /** The headers server/kit sends on every answer of its own (server/kit/http.js, API_HEADERS), Cache-Control aside. */
 const API_HEADERS = {
   'x-content-type-options': 'nosniff',
@@ -161,6 +170,37 @@ function sameHeaders(label, response, sitePath) {
   for (const [name, value] of Object.entries(want(sitePath))) {
     if (response.headers[name] !== value) problems.push(`${label} ${sitePath}: ${name}: ${response.headers[name]}, not ${value}`);
   }
+}
+
+/**
+ * What a server answers under api/ while the API it hands the path to is not running: `status`,
+ * with the site's not-found page and every header _headers gives that page, for the page's
+ * questions and for the requests that change something, and nothing from the folder.
+ */
+async function apiDownChecks(label, origin, status, requestHeaders = {}) {
+  for (const [method, p] of [['GET', '/api/config'], ['GET', '/api/me'], ['POST', '/api/checkout'], ['DELETE', '/api/me']]) {
+    const response = await get(`${origin}${p}`, requestHeaders, method);
+    assert.equal(response.status, status, `${label}: ${method} ${p} answered ${response.status}`);
+    assert.ok(response.body.includes(NOT_FOUND), `${label}: ${method} ${p} is not the site's not-found page: ${response.body.slice(0, 80)}`);
+    assert.doesNotMatch(response.body, /planted/);
+    sameHeaders(`${label} ${method}`, response, '/404.html');
+  }
+  assert.deepEqual(problems, []);
+}
+
+/**
+ * The lines README.md's ```apache block gives the virtual host for the API, read out of README.md
+ * so that the lines it gives are the lines run: one ProxyPass and the site's not-found page for
+ * each error the proxy answers itself. Written for a site at the root of its domain; here the
+ * site is under BASE, and the API on `apiPort`.
+ */
+function apacheApiLines(apiPort) {
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  const block = /^ {2}```apache\n([\s\S]*?)^ {2}```$/m.exec(readme);
+  assert.ok(block, "README.md has no ```apache block for the API's virtual host");
+  const lines = block[1].split('\n').map((l) => l.trim()).filter(Boolean);
+  assert.deepEqual(lines, ['ProxyPass "/api/" "http://127.0.0.1:8788/api/"', 'ErrorDocument 502 /404.html', 'ErrorDocument 503 /404.html', 'ErrorDocument 504 /404.html']);
+  return lines.map((l) => l.replace('"/api/"', `"${BASE}/api/"`).replace('http://127.0.0.1:8788/api/', `http://127.0.0.1:${apiPort}${BASE}/api/`).replace(/ \/404\.html$/, ` ${BASE}/404.html`));
 }
 
 async function nginx() {
@@ -263,15 +303,19 @@ async function nginx() {
     assert.equal((await get(`${origin}/${LONG_QUERY}`)).status, 414);
   });
 
-  await check('nginx: api/ is a 502 while the API is not running, with the HSTS line alone, and never the folder', async () => {
+  await check("nginx: api/ is a 502 while the API is not running, the site's not-found page with every header, and never the folder", async () => {
     // The page reads anything but the API's JSON as no API, and draws no sign-in and no shop.
-    for (const p of ['/api/config', '/api/me']) {
-      const response = await get(`${origin}${p}`);
-      assert.equal(response.status, 502, `${p} answered ${response.status}`);
-      assert.doesNotMatch(response.body, /planted/);
-      assert.equal(response.headers['strict-transport-security'], want('/')['strict-transport-security']);
-      for (const name of ['content-security-policy', 'permissions-policy', 'x-frame-options', 'referrer-policy']) assert.equal(response.headers[name], undefined, `${p}: ${name}`);
-    }
+    // nginx's own error page would go out with the API location's one header, HSTS, alone.
+    await apiDownChecks('nginx', origin, 502);
+  });
+
+  await check('nginx: /api, without its slash, is the not-found page with every header, not a redirect', async () => {
+    const response = await get(`${origin}/api`);
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.location, undefined);
+    assert.ok(response.body.includes(NOT_FOUND));
+    sameHeaders('nginx', response, '/404.html');
+    assert.deepEqual(problems, []);
   });
 
   await check("nginx: api/ reaches the sign-in and shop API, and its answers leave with the API's headers and HSTS alone", async () => {
@@ -318,7 +362,7 @@ async function nginx() {
  * the modules in `modules`, `AllowOverride FileInfo Options` and `ServerTokens Prod`. The site is
  * under BASE, as it was built, through an Alias.
  */
-async function apache(label, modules) {
+async function apache(label, modules, extra = []) {
   const dir = path.join(work, label);
   fs.mkdirSync(dir, { recursive: true });
   const port = await freePort();
@@ -345,6 +389,7 @@ async function apache(label, modules) {
       '<FilesMatch "^\\.ht">',
       '  Require all denied',
       '</FilesMatch>',
+      ...extra,
       `Alias ${BASE} ${site}`,
       `<Directory ${site}>`,
       '  Options Indexes FollowSymLinks',
@@ -420,6 +465,44 @@ async function apacheChecks() {
 
   await check('Apache: a game in the query is past the request line it takes (the link carries it in the fragment)', async () => {
     assert.equal((await get(`${origin}/${LONG_QUERY}`, proxied)).status, 414);
+  });
+
+  // .htaccess cannot proxy: README.md's lines go in the server's own configuration, and answer
+  // api/ before the folder (and so its .htaccess) is reached.
+  const apiPort = await freePort();
+  const withApi = await apache('apache-api', ['rewrite', 'headers', 'proxy', 'proxy_http'], apacheApiLines(apiPort));
+
+  await check("Apache with README.md's ProxyPass and ErrorDocument lines: api/ is a 503 while the API is not running, the site's not-found page with every header", async () => {
+    // Without the ErrorDocument lines this was Apache's own 503 page, with none of the site's headers.
+    await apiDownChecks('Apache', withApi.origin, 503, proxied);
+    const page = await get(`${withApi.origin}/`, proxied);
+    assert.equal(page.status, 200);
+    sameHeaders('Apache with the ProxyPass', page, '/');
+    assert.deepEqual(problems, []);
+  });
+
+  await check("Apache with README.md's lines: a running API answers api/ with its own headers and none of the site's", async () => {
+    const appUrl = `https://127.0.0.1:${new URL(withApi.origin).port}${BASE}/`;
+    const fakes = await createFakes();
+    const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mdck-hosts-apache-api-'));
+    const logs = [];
+    const api = await startApi({ env: envFor(appUrl), dataDir: data, port: apiPort, fetch: fakes.fetch, log: (level, message) => logs.push(`${level}: ${message}`) });
+    try {
+      const config = await get(`${withApi.origin}/api/config`, proxied);
+      assert.equal(config.status, 200);
+      assert.deepEqual(JSON.parse(config.body).shop.products.map((product) => product.id), ['supporter']);
+      const me = await get(`${withApi.origin}/api/me`, proxied);
+      assert.deepEqual(JSON.parse(me.body), { user: null, entitlements: [] });
+      for (const response of [config, me]) {
+        for (const [name, value] of Object.entries(API_HEADERS)) assert.equal(response.headers[name], value, name);
+        for (const name of ['permissions-policy', 'x-frame-options', 'cross-origin-opener-policy']) assert.equal(response.headers[name], undefined, name);
+      }
+      assert.deepEqual(fakes.unexpected, []);
+      assert.deepEqual(logs, []);
+    } finally {
+      await api.close();
+      fs.rmSync(data, { recursive: true, force: true });
+    }
   });
 
   const bare = await apache('apache-bare', []);

@@ -8,6 +8,7 @@
 import React, { useEffect } from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_RULES } from '../../engine';
+import { PENDING_MS, SESSION_KEYS } from '../accountModel';
 import { KEYS, LEGACY_KEYS } from '../persist';
 import { DEFAULT_SETTINGS, Settings, SettingsProvider, resetSettings, useSettings } from '../settings';
 import { resolveScheme } from '../theme';
@@ -41,6 +42,12 @@ describe('storage keys', () => {
       entitlements: 'multidcheckers.entitlements.v1',
       setAside: 'multidcheckers.setaside.v1',
     });
+  });
+
+  it('are joined, on the website alone, by one sessionStorage record for a payment on its way', () => {
+    // The tab's own (accountClient.web.ts), ten minutes at most, and never read on a phone.
+    expect(SESSION_KEYS).toEqual({ purchasePending: 'multidcheckers.purchasePending.v1' });
+    expect(PENDING_MS).toBe(600000);
   });
 
   it('migrate from the bare keys every earlier build wrote - all but the newest record', () => {

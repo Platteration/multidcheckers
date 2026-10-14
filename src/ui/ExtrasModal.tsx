@@ -16,7 +16,7 @@ interface Props {
 export function ExtrasModal({ visible, onClose }: Props) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { entitlements, storeEnabled, buySupporter, restorePurchases } = useEntitlements();
+  const { entitlements, storeEnabled, checking, buySupporter, restorePurchases } = useEntitlements();
   const account = useAccount();
   // The website's shop, when its api/ sells the pack; a phone, and a site without one, never have it.
   const shop = account.supporter;
@@ -52,7 +52,10 @@ export function ExtrasModal({ visible, onClose }: Props) {
             <Text style={styles.head}>And</Text>
             <Text style={styles.list}>A supporter badge on the title, and future puzzle packs as they arrive.</Text>
             <View style={{ height: spacing.md }} />
-            {shop ? (
+            {checking ? (
+              // The website has not heard back from its api/ yet: nothing is offered or owned until it has.
+              <Text style={styles.body}>{CHECKING_SHOP}</Text>
+            ) : shop ? (
               <ShopItem product={shop} account={account} owned={entitlements.supporter} styles={styles} />
             ) : entitlements.supporter ? (
               <Text style={styles.owned}>You own the Supporter pack. Thank you.</Text>
@@ -63,7 +66,7 @@ export function ExtrasModal({ visible, onClose }: Props) {
             )}
           </ScrollView>
           <View style={{ height: spacing.md }} />
-          {!shop && !entitlements.supporter ? (
+          {!checking && !shop && !entitlements.supporter ? (
             <>
               <Button label="Get the Supporter pack" tone="primary" onPress={buy} disabled={!storeEnabled} />
               <View style={{ height: spacing.sm }} />
@@ -79,10 +82,15 @@ export function ExtrasModal({ visible, onClose }: Props) {
   );
 }
 
+/** What Extras says on the website while the site has not said yet whether it sells the pack. */
+export const CHECKING_SHOP = 'Checking what this site offers…';
+
 /**
  * The pack as the website sells it: the server's name, description and price, drawn as text,
  * and Buy, which leaves for Stripe's Checkout. Signed out, Buy is a way to sign in first; once
- * `api/me` reports the purchase, the item says it is owned.
+ * `api/me` reports the purchase, the item says it is owned. While a payment the visitor made is on
+ * its way (back from Checkout, or the kit's 409 payment_pending), it says so where Buy was: a
+ * second press would make a second Checkout, and both could be paid.
  */
 function ShopItem({ product, account, owned, styles }: { product: ShopProduct; account: AccountApi; owned: boolean; styles: ReturnType<typeof makeStyles> }) {
   const [busy, setBusy] = useState(false);
@@ -101,6 +109,8 @@ function ShopItem({ product, account, owned, styles }: { product: ShopProduct; a
       <View style={{ height: spacing.sm }} />
       {owned ? (
         <Text style={styles.owned}>{WORDS.owned}</Text>
+      ) : account.user && account.paymentPending ? (
+        <Text style={styles.body}>{WORDS.processing}</Text>
       ) : account.user ? (
         <Button label={WORDS.buy} tone="primary" onPress={buy} disabled={busy} />
       ) : (

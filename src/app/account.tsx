@@ -8,8 +8,12 @@ import { AccountClient, Me, ShopProduct, SIGNED_OUT, SUPPORTER_ENTITLEMENT, SUPP
  * is drawn. On the web it asks the site's `api/config` once; anything but a sign-in that is on
  * (a 404 on GitHub Pages, a network error, a body that is not the kit's) leaves it off for
  * good, with nothing stored and nothing retried, and the page exactly as it is without it.
+ * Until that answer (and, where sign-in is on, the first `api/me`) is in, it is `checking`:
+ * nothing is owned and nothing is offered yet (entitlements.tsx).
  */
 export interface AccountApi {
+  /** The web build is still asking the site what is on: nothing is owned or offered until it knows. */
+  checking: boolean;
   /** Whether the site offers sign-in: the Account rows of Settings are drawn only then. */
   signInOn: boolean;
   /** The Supporter pack when the site sells it: the shop in Extras is drawn only then. */
@@ -18,7 +22,16 @@ export interface AccountApi {
   user: Me['user'];
   /** What the server says the visitor owns: the only record of a purchase on the web. */
   entitlements: readonly string[];
-  /** One line for the screen: sign-in failed, a purchase unlocked or still on its way. */
+  /**
+   * The signed-in visitor paid for the pack and `api/me` does not report it yet: Extras says so
+   * where Buy was, so that a second press cannot make a second Checkout to pay.
+   */
+  paymentPending: boolean;
+  /**
+   * One line for the screen: sign-in failed, a purchase unlocked or still on its way. A line about
+   * a payment is said only to a visitor `api/me` reports signed in, and every line goes once the
+   * page finds nobody signed in (sign-out, deletion, a session that ended).
+   */
   notice: string | null;
   dismissNotice: () => void;
   /** Leaves for Google, and comes back here. */
@@ -31,10 +44,12 @@ export interface AccountApi {
 }
 
 const OFF: AccountApi = {
+  checking: false,
   signInOn: false,
   supporter: null,
   user: null,
   entitlements: [],
+  paymentPending: false,
   notice: null,
   dismissNotice: () => {},
   signIn: () => {},
@@ -43,18 +58,22 @@ const OFF: AccountApi = {
   buySupporter: async () => null,
 };
 
+const CHECKING: AccountApi = { ...OFF, checking: true };
+
 const Ctx = createContext<AccountApi>(OFF);
 
 interface State {
-  on: boolean;
+  status: 'off' | 'checking' | 'on';
   supporter: ShopProduct | null;
   me: Me;
+  pending: boolean;
   notice: string | null;
 }
 
-const OFF_STATE: State = { on: false, supporter: null, me: SIGNED_OUT, notice: null };
+const OFF_STATE: State = { status: 'off', supporter: null, me: SIGNED_OUT, pending: false, notice: null };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const holds = (me: Me) => me.entitlements.includes(SUPPORTER_ENTITLEMENT);
 
 interface Props {
   children?: React.ReactNode;
@@ -64,42 +83,78 @@ interface Props {
 }
 
 export function AccountProvider({ children, client = accountClient, wait = sleep }: Props) {
-  const [state, setState] = useState<State>(OFF_STATE);
+  const [state, setState] = useState<State>(() => (client.web ? { ...OFF_STATE, status: 'checking' } : OFF_STATE));
   const alive = useRef(true);
+  // Which visitor an answer is about: moves on whenever the page learns that nobody is signed in
+  // any more (sign-out, deletion, a session that ended), so a payment poll still asking then does
+  // not put that visitor, their pack or a line about their payment back on a page signed out.
+  const visitor = useRef(0);
 
   useEffect(() => {
     alive.current = true;
     if (!client.web) return undefined;
     void (async () => {
       const config = await client.config();
-      if (!alive.current || !config) return;
+      if (!alive.current) return;
+      if (!config) {
+        setState(OFF_STATE);
+        return;
+      }
       const landing = client.takeLanding();
       const me = (await client.me()) ?? SIGNED_OUT;
       if (!alive.current) return;
       const product = config.supporter;
-      const bought = landing.purchase === 'success' && product !== null;
-      const holds = (m: Me) => m.entitlements.includes(SUPPORTER_ENTITLEMENT);
+      // Anyone can open the address Checkout returns to. Only a visitor api/me reports signed in
+      // can have paid: to anyone else the page says nothing about a payment and asks nothing more,
+      // as for a cancelled Checkout (takeLanding has already taken it out of the address).
+      const bought = landing.purchase === 'success' && product !== null && me.user !== null;
       const thanks = product ? WORDS.thanks(product.name) : null;
+      // A payment on its way: this landing, or one this tab noted before a reload.
+      let pending = false;
+      if (product !== null && me.user !== null && !holds(me)) {
+        if (bought) client.holdPurchase();
+        pending = bought || client.purchaseHeld();
+      } else {
+        client.releasePurchase();
+      }
       setState({
-        on: true,
+        status: 'on',
         supporter: product,
         me,
+        pending,
         notice: landing.signIn === 'failed' ? WORDS.signInFailed : bought && holds(me) ? thanks : null,
       });
       if (!bought || holds(me)) return;
       // Stripe's webhook grants the purchase, and may land after the visitor is back.
+      const asked = visitor.current;
       const { held, me: last } = await pollFor(SUPPORTER_ENTITLEMENT, () => client.me(), wait);
-      if (!alive.current) return;
-      setState((s) => ({ ...s, me: last ?? s.me, notice: held ? thanks : WORDS.paymentPending }));
+      if (!alive.current || visitor.current !== asked) return;
+      if (held || last?.user === null) client.releasePurchase();
+      setState((s) => {
+        const now = last ?? s.me;
+        // A session that ended while the page asked (another tab signed out) hears nothing either.
+        if (now.user === null) return { ...s, me: now, pending: false, notice: null };
+        return { ...s, me: now, pending: s.pending && !holds(now), notice: held ? thanks : WORDS.paymentPending };
+      });
     })();
     return () => {
       alive.current = false;
     };
   }, [client, wait]);
 
-  const refresh = useCallback(async () => {
-    const me = await client.me();
-    if (alive.current) setState((s) => ({ ...s, me: me ?? SIGNED_OUT }));
+  /** Asks api/me again and draws what it says; nobody signed in takes every line with them. */
+  const refresh = useCallback(async (): Promise<Me> => {
+    const me = (await client.me()) ?? SIGNED_OUT;
+    if (!alive.current) return me;
+    if (me.user === null) visitor.current += 1;
+    if (me.user === null || holds(me)) client.releasePurchase();
+    setState((s) => ({
+      ...s,
+      me,
+      pending: s.pending && me.user !== null && !holds(me),
+      notice: me.user === null ? null : s.notice,
+    }));
+    return me;
   }, [client]);
 
   const signOut = useCallback(async () => {
@@ -122,17 +177,27 @@ export function AccountProvider({ children, client = accountClient, wait = sleep
       await refresh();
       return null;
     }
+    if (result === 'pending') {
+      // A Checkout for the pack was paid (in another tab, or before a reload) and its webhook has
+      // not arrived: Buy waits for it, as after coming back from Checkout.
+      client.holdPurchase();
+      setState((s) => ({ ...s, pending: true }));
+      const me = await refresh();
+      return me.user !== null && !holds(me) ? WORDS.paymentPending : null;
+    }
     return ACCOUNT_NOTES[result];
   }, [client, refresh]);
 
   const api = useMemo<AccountApi>(
     () =>
-      state.on
+      state.status === 'on'
         ? {
+            checking: false,
             signInOn: true,
             supporter: state.supporter,
             user: state.me.user,
             entitlements: state.me.entitlements,
+            paymentPending: state.pending,
             notice: state.notice,
             dismissNotice: () => setState((s) => ({ ...s, notice: null })),
             signIn: () => client.signIn(),
@@ -140,7 +205,9 @@ export function AccountProvider({ children, client = accountClient, wait = sleep
             deleteAccount,
             buySupporter,
           }
-        : OFF,
+        : state.status === 'checking'
+          ? CHECKING
+          : OFF,
     [state, client, signOut, deleteAccount, buySupporter],
   );
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;

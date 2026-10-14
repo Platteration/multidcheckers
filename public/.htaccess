@@ -13,8 +13,10 @@
 # `ServerTokens Prod` in the server's configuration, or every response names Apache's version.
 # The sign-in and shop API (server/kit, `node server/start.mjs` on 127.0.0.1:8788) cannot be
 # proxied from here: mod_proxy is server configuration. In the virtual host, with mod_proxy and
-# mod_proxy_http: ProxyPass "/api/" "http://127.0.0.1:8788/api/" (README, "Sign-in and the
-# shop"). Without it api/ is a 404 here and the page draws neither.
+# mod_proxy_http: ProxyPass "/api/" "http://127.0.0.1:8788/api/", and ErrorDocument 502, 503 and
+# 504 /404.html beside it, so that an API not running is the site's not-found page rather than
+# Apache's own with none of these headers (README, "Sign-in and the shop"). Without the
+# ProxyPass api/ is a 404 here and the page draws neither.
 
 Options -Indexes
 ServerSignature Off

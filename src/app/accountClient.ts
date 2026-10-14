@@ -17,4 +17,7 @@ export const accountClient: AccountClient = {
   deleteAccount: async () => false,
   checkout: async () => 'unavailable',
   takeLanding: () => NO_LANDING,
+  holdPurchase: () => {},
+  purchaseHeld: () => false,
+  releasePurchase: () => {},
 };

@@ -6,6 +6,8 @@ import { Entitlements, NO_ENTITLEMENTS, PurchaseResult, STORE_ENABLED, loadEntit
 interface EntitlementsApi {
   entitlements: Entitlements;
   storeEnabled: boolean;
+  /** The website is still asking its api/ what is on: nothing is owned and nothing offered yet. */
+  checking: boolean;
   /** Whether an item flagged premium may be used right now. */
   owns: (premium: boolean) => boolean;
   buySupporter: () => Promise<PurchaseResult>;
@@ -15,6 +17,7 @@ interface EntitlementsApi {
 const Ctx = createContext<EntitlementsApi>({
   entitlements: NO_ENTITLEMENTS,
   storeEnabled: STORE_ENABLED,
+  checking: false,
   owns: () => true,
   buySupporter: async () => 'unavailable',
   restorePurchases: async () => {},
@@ -26,7 +29,11 @@ const Ctx = createContext<EntitlementsApi>({
  * there and every look is free. On the website the store is on exactly when the site's api/
  * sells the Supporter pack (account.tsx), and then the server is the record of a purchase:
  * what the device stored is not read for it, so nothing is unlocked that `api/me` has not
- * reported. A ✦ look stays a cosmetic either way: the gate is in the page, not a secret.
+ * reported. While the site has not answered yet, nothing is owned and nothing is offered; once
+ * it has answered that it sells nothing (a host with no API, or sign-in without a shop), every
+ * look is free, as on a phone. `owns` is what the board and pieces are drawn through
+ * (`drawnLook` in theme.tsx), not only what the pickers offer. A ✦ look stays a cosmetic either
+ * way: the gate is in the page, not a secret.
  */
 export function EntitlementsProvider({ children }: { children: React.ReactNode }) {
   const account = useAccount();
@@ -40,12 +47,16 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
+  const checking = account.checking;
   const webShop = account.supporter !== null;
   const storeEnabled = webShop || STORE_ENABLED;
   const webSupporter = account.entitlements.includes(SUPPORTER_ENTITLEMENT);
-  const entitlements = useMemo<Entitlements>(() => (webShop ? { supporter: webSupporter } : stored), [webShop, webSupporter, stored]);
+  const entitlements = useMemo<Entitlements>(
+    () => (checking ? NO_ENTITLEMENTS : webShop ? { supporter: webSupporter } : stored),
+    [checking, webShop, webSupporter, stored],
+  );
 
-  const owns = useCallback((premium: boolean) => !storeEnabled || !premium || entitlements.supporter, [storeEnabled, entitlements]);
+  const owns = useCallback((premium: boolean) => !premium || (!checking && (!storeEnabled || entitlements.supporter)), [checking, storeEnabled, entitlements]);
 
   const buySupporter = useCallback(async () => {
     const result = await purchase('supporter');
@@ -64,8 +75,8 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const api = useMemo(
-    () => ({ entitlements, storeEnabled, owns, buySupporter, restorePurchases }),
-    [entitlements, storeEnabled, owns, buySupporter, restorePurchases],
+    () => ({ entitlements, storeEnabled, checking, owns, buySupporter, restorePurchases }),
+    [entitlements, storeEnabled, checking, owns, buySupporter, restorePurchases],
   );
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

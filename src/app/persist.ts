@@ -2,7 +2,8 @@
  * Local persistence. Everything is best-effort: storage can be missing (web
  * private mode) or corrupt, and the app must still start.
  *
- * Every key the app stores is named here and nowhere else. On the web build
+ * Every key the app stores is named here and nowhere else, but for the website's one
+ * sessionStorage record (SESSION_KEYS in accountModel.ts, the tab's own). On the web build
  * AsyncStorage is localStorage keyed by *origin*, and a GitHub Pages project
  * site shares its origin with every other app the account publishes — the
  * sibling game included, which stored the same bare `settings.v1` — so each
