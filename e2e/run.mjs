@@ -697,8 +697,8 @@ try {
       await button(p, 'Buy').waitFor();
 
       // Paid again, and the page reloaded before the webhook: the tab remembers the payment, so
-      // Buy stays away (the kit carried here would start a second Checkout for it), until the
-      // webhook is in and api/me reports the pack.
+      // Buy stays away (pressed, the kit would answer 409 payment_pending), until the webhook is in
+      // and api/me reports the pack.
       const backAgain = p.waitForResponse((r) => r.url() === `${shop.url}?purchase=success`);
       await press(p, 'Buy');
       await backAgain;

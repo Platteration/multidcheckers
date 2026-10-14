@@ -181,10 +181,9 @@ export async function pollFor(entitlement: string, readMe: () => Promise<Me | nu
 
 /**
  * How `POST api/checkout` ended, as the page reads it. `pending` is a 409 whose body says
- * `payment_pending`: a Checkout for the pack has been paid and its webhook has not arrived. The kit
- * this repository carries never says it (server/kit at 7f4e583 reads every second Buy as a new
- * Checkout); the kit's later copy does, and a page that took it for `owned` would draw Buy again
- * with nothing said.
+ * `payment_pending`: a Checkout for the pack has been paid and its webhook has not arrived (the
+ * kit answers a second Buy so from server/kit 1dccad1 on), and a page that took it for `owned`
+ * would draw Buy again with nothing said.
  */
 export type CheckoutResult = 'redirecting' | 'signin' | 'owned' | 'pending' | 'unavailable' | 'busy' | 'failed';
 
@@ -193,8 +192,8 @@ export type CheckoutResult = 'redirecting' | 'signin' | 'owned' | 'pending' | 'u
  * sent this tab back with a payment `api/me` had not reported yet, as `{ "at": <ms> }`. Read by
  * account.tsx through the client, so that a reload within PENDING_MS (the page's own words say
  * "reload to check") still draws "Payment received — processing" where Buy was, rather than a
- * Buy whose second press would make a second Checkout the visitor could pay. It goes once the
- * purchase is reported, or once nobody is signed in; it unlocks nothing.
+ * Buy that, pressed, the API would answer 409 payment_pending. It goes once the purchase is
+ * reported, or once nobody is signed in; it unlocks nothing.
  */
 export const SESSION_KEYS = {
   purchasePending: 'multidcheckers.purchasePending.v1',

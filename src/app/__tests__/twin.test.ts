@@ -29,9 +29,9 @@ const TWIN_FILES: Record<string, string> = {
 
 /**
  * server/kit/ as one hash: each file's path inside it and its sha256, in name order. The kit is
- * the canonical copy (7f4e583) in both repositories, and never edited in either.
+ * the canonical copy (1dccad1) in both repositories, and never edited in either.
  */
-const KIT = { files: 19, sha256: '221f7c3fe98a299ddbf7a51d09a932356795b4610a25b5db51627e8df1974506' };
+const KIT = { files: 21, sha256: '56cde15773b5e9a7011832de0a0fe05c9205dfc85300d19226bed5d3d4ab2727' };
 
 function kitHash() {
   const dir = path.join(root, 'server', 'kit');

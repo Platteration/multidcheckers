@@ -11,11 +11,15 @@ parody built on checkers. See README.md for the rules and layout.
   `server/api.test.mjs`), then the jest-expo unit tests; `npm run typecheck` runs tsc. Jest stays on 29
   with the jest-expo preset: most suites render React Native screens or mock modules, and
   Vitest in Node (the default branch's runner from October) loaded 11 of the 26 (measured).
-- CI's check job runs on `ubuntu-24.04`, not `ubuntu-latest`, which becomes Ubuntu 26.04 on
-  2026-10-19: Playwright 1.56.1, the lockfile's, has no Chromium build for 26.04.
-  `src/app/__tests__/ci.test.ts` asks that Playwright's own CLI (`install --dry-run`, told the
-  platform) whether it has a build for the release the job names, so raising Playwright and
-  then the runner is one change.
+- Every job of `ci.yml` and `pages.yml` runs on `ubuntu-24.04` (CONVENTIONS.md, "CI"), not
+  `ubuntu-latest`, which becomes Ubuntu 26.04 on 2026-10-19: Playwright 1.56.1, the lockfile's,
+  has no Chromium build for 26.04. `src/app/__tests__/ci.test.ts` asks that Playwright's own CLI
+  (`install --dry-run`, told the platform) whether it has a build for the release the check job
+  names, so raising Playwright and then the runner is one change. The audit job runs the shared
+  gate, `.github/audit/npm-audit.mjs`, which accepts only what `.github/audit/accepted.json`
+  lists (braces and node-forge, each with a route from every direct dependency that reaches it,
+  until 2027-01-11); a lockfile change can add a route, which the gate names, and the reason is
+  read again for it.
 - Exact versioned Expo docs: https://docs.expo.dev/versions/v57.0.0/
 
 ## Native configuration
@@ -209,13 +213,18 @@ are drawn through `owns` (`drawnLook` in `theme.tsx`, which is why `ThemeProvide
 its default, and the stored record is never rewritten for it. A line about a payment is said,
 and polled for, only when the first `api/me` reports someone signed in; every line goes once a
 refresh finds nobody signed in, and a poll still asking then is not applied after it (`visitor`
-in `account.tsx`). After `?purchase=success`, and after the kit's 409 `payment_pending` (which
-the kit this repository carries never sends: its later copy does), Extras says "Payment
-received — processing" where Buy was until `api/me` reports the pack, for the life of the page
-and across a reload within `PENDING_MS` (ten minutes) through the tab's one sessionStorage
-record, `multidcheckers.purchasePending.v1` (`SESSION_KEYS` in `accountModel.ts`, pinned by the
-contract test), which goes once the pack is reported or nobody is signed in: with the kit at
-7f4e583 a second Buy before the webhook makes a second Checkout that can be paid. With the API
+in `account.tsx`). After `?purchase=success`, and after the kit's 409 `payment_pending`, Extras
+says "Payment received — processing" where Buy was until `api/me` reports the pack, for the life
+of the page and across a reload within `PENDING_MS` (ten minutes) through the tab's one
+sessionStorage record, `multidcheckers.purchasePending.v1` (`SESSION_KEYS` in `accountModel.ts`,
+pinned by the contract test), which goes once the pack is reported or nobody is signed in. The
+kit (1dccad1) gives a second Buy before the webhook the Checkout Session it gave the first while
+that is open, and answers 409 `payment_pending` once it is paid, so a second payment now takes
+presses that read different states (two browsers or devices signed in at once, or either side of
+the kit's five-minute boundary: `server/kit/README.md`, "Limits worth knowing"); the tab's record
+keeps Buy away within the tab all the same, and Extras keeps Buy disabled while a press is out,
+as the kit asks of a page (one Buy at a time; a 502 from a press that met another is read as
+"try again"). With the API
 not running, nginx's `/api/` answers 502 or 504 with the site's not-found page and every header
 (`error_page 502 504 /404.html`), `/api` is the same page (`location = /api`), and README gives
 Apache's `ErrorDocument` lines beside its `ProxyPass`; `website.test.ts` pins all three. The

@@ -518,7 +518,7 @@ describe('the files a site carries', () => {
     const text = read('public/.well-known/security.txt');
     const field = (name: string) => [...text.matchAll(new RegExp(`^${name}: (.+)$`, 'gm'))].map((m) => m[1]!);
     expect(field('Contact')).toEqual(['https://github.com/Platteration/multidcheckers/issues']);
-    expect(field('Policy')).toEqual(['https://github.com/Platteration/multidcheckers/blob/HEAD/SECURITY.md']);
+    expect(field('Policy')).toEqual(['https://github.com/Platteration/multidcheckers/blob/main/SECURITY.md']);
     expect(field('Preferred-Languages')).toEqual(['en']);
     const [expires] = field('Expires');
     const left = Date.parse(expires!) - Date.now();

@@ -104,7 +104,7 @@ export const accountClient: AccountClient = {
     if (!response) return 'failed';
     if (response.status === 401) return 'signin';
     if (response.status === 409) {
-      // Owned, or (the kit's later copy) a Checkout for it paid and not yet recorded.
+      // Owned, or a Checkout for it paid and not yet recorded (409 payment_pending).
       const refusal = await refusalOf(response);
       return refusal === 'payment_pending' ? 'pending' : 'owned';
     }

@@ -279,9 +279,10 @@ renewing before then (`website.test.ts` fails once it has passed). On GitHub
 Pages, a deploy from a branch runs Jekyll over the folder unless it holds a
 `.nojekyll`, and Jekyll leaves out every path that starts with `_` or `.`,
 `_expo/` (the whole game) among them: the site carries one, so keep it when
-copying the folder to the branch. The Pages upload action can leave hidden
-files out, so check after a deploy that `/.well-known/security.txt` is
-served.
+copying the folder to the branch. The Pages upload action leaves out every
+path that starts with a dot unless told otherwise (from its v4), so
+`pages.yml` sets `include-hidden-files: true`; check after a deploy that
+`/.well-known/security.txt` is served.
 
 ### Sign-in and the shop
 
@@ -313,11 +314,14 @@ plays exactly as it does without it. The phone apps never have it.
   before Stripe's webhook has reached the site, Extras says "Payment received
   — processing" where Buy was until `api/me` reports the pack, and across a
   reload within ten minutes through one sessionStorage record of the tab's
-  own (`multidcheckers.purchasePending.v1`), because the kit this repository
-  carries starts a new Checkout for every Buy and a second one could be paid
-  too (the kit's later copy refuses it, 409 `payment_pending`, which the page
-  reads the same way). Another tab, or a reload after ten minutes, still
-  shows Buy until the webhook arrives. The About card's
+  own (`multidcheckers.purchasePending.v1`). The API itself gives a second
+  Buy before the webhook the Checkout it gave the first while that is still
+  open, and once it is paid refuses it (409 `payment_pending`, which the page
+  reads the same way), so another tab, or a reload after ten minutes, still
+  shows Buy until the webhook arrives, and pressing it there says the payment
+  is on its way rather than starting a second one. Two devices signed in at
+  once can still each start one (`server/kit/README.md`, "Limits worth
+  knowing"). The About card's
   sentence about what leaves the device says what does then. The code is
   `src/app/accountClient.web.ts` (the one module of the app that makes a
   request, bundled into the web build alone), `accountModel.ts`,
@@ -449,8 +453,17 @@ It needs Python's Playwright (`pip install playwright`) and a Chromium, named by
 
 `.github/workflows/ci.yml` runs the lint, the typecheck, the tests, the
 conventions test, an Android and web export and the browser suite on every
-push; a separate job runs `npm audit --omit=dev --audit-level=high` against
-the lockfile.
+push; a separate job runs `node .github/audit/npm-audit.mjs` against the
+lockfile: the shared audit gate (CONVENTIONS.md, "CI"), which runs
+`npm audit --omit=dev` and fails on every high or critical advisory, less what
+`.github/audit/accepted.json` accepts. That list accepts two today, braces and
+node-forge, which reach the production tree only through Metro's, Expo's and
+Jest's file maps and `@expo/cli`'s code signing, none of it in the app or the
+website, and have no patched release to take. Each acceptance names a route
+from every direct dependency that reaches the package and expires within 90
+days, so it is read again at least once a quarter, and sooner when a fixed
+release appears in the major an installed copy is on, or the lockfile brings
+the package in through a direct dependency the list has no route from.
 
 ## Project layout
 
@@ -519,6 +532,8 @@ e2e/hosts.mjs              the built site on a real nginx and a real Apache, and
 e2e/ui-regression.py       the development-server check above (Python)
 .github/workflows/         ci.yml (the gate and the audit) and pages.yml (the
                            GitHub Pages deploy)
+.github/audit/             the shared audit gate the audit job runs, and the
+                           advisories it accepts (accepted.json)
 assets/artwork/icon.blend  the icons' Blender scene; scripts/render-icons.py
                            renders assets/ from it
 docs/                      the release checklist and the store listing draft
