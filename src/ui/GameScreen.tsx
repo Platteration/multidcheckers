@@ -27,9 +27,8 @@ import { useEntitlements } from '../app/entitlements';
 import { setHapticsEnabled, setSoundEnabled } from '../app/feedback';
 import { KEYS, removeKey, saveJson } from '../app/persist';
 import { useSettings } from '../app/settings';
-import { useReduceMotion } from '../motion';
-import { clearCodeFromUrl, codeFromUrl, onWebHashChange, takeLaunchUrl, webLinkFor } from '../app/links';
-import { narrate, variantsLabel } from '../app/narrate';
+import { clearCodeFromUrl, codeFromUrl, webLinkFor } from '../app/links';
+import { narrate } from '../app/narrate';
 import { useStats } from '../app/stats';
 import { useProgress } from '../app/progress';
 import { decodeGame, shareOffer } from '../app/share';
@@ -110,44 +109,40 @@ export function GameScreen({ initialHistory, initialSetup, keepStoredGame }: Pro
       const loaded = decodeGame(code);
       game.load(loaded.history, loaded.setup);
       setReplayIndex(null);
+      clearCodeFromUrl();
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : String(e);
     }
   };
-  // A link arrives without warning, so it may not throw a game away unasked.
-  const [linkCode, setLinkCode] = useState<string | null>(null);
-  const [linkProblem, setLinkProblem] = useState<string | null>(null);
-  const acceptCode = (code: string) => {
-    const problem = loadCode(code);
-    setLinkProblem(problem);
-    // Whether it loaded or not: a code left in the address bar is read again on
-    // every reload, and one that was refused is refused again just as often.
-    clearCodeFromUrl();
+  const loadCodeRef = useRef(loadCode);
+  loadCodeRef.current = loadCode;
+  const acceptIncomingCode = (code: string) => {
+    const open = () => {
+      const problem = loadCodeRef.current(code);
+      if (problem) Alert.alert('Could not load shared game', problem);
+    };
+    if (game.history.length > 1) {
+      Alert.alert('Open shared game?', 'Loading this link replaces the game in progress.', [
+        { text: 'Keep playing', style: 'cancel' },
+        { text: 'Open shared game', style: 'destructive', onPress: open },
+      ]);
+    } else {
+      open();
+    }
   };
-  const acceptCodeRef = useRef(acceptCode);
-  acceptCodeRef.current = acceptCode;
-  const hasGameToLoseRef = useRef(false);
-  hasGameToLoseRef.current = linkNeedsConfirming(game.history.length);
-  const arriveCode = (code: string) => {
-    if (hasGameToLoseRef.current) setLinkCode(code);
-    else acceptCodeRef.current(code);
-  };
-  const arriveCodeRef = useRef(arriveCode);
-  arriveCodeRef.current = arriveCode;
-  // The launch link is asked for once per run (takeLaunchUrl): this screen is
-  // mounted again by the error boundary, and the platform reports the same
-  // launch link to every mount.
+  const acceptIncomingCodeRef = useRef(acceptIncomingCode);
+  acceptIncomingCodeRef.current = acceptIncomingCode;
   useEffect(() => {
     takeLaunchUrl(() => Linking.getInitialURL())
       .then((url) => {
         const code = codeFromUrl(url);
-        if (code) arriveCodeRef.current(code);
+        if (code) acceptIncomingCodeRef.current(code);
       })
       .catch(() => {});
     const sub = Linking.addEventListener('url', ({ url }) => {
       const code = codeFromUrl(url);
-      if (code) arriveCodeRef.current(code);
+      if (code) acceptIncomingCodeRef.current(code);
     });
     // On the web a link to this page that arrives while it is open changes
     // only the fragment, which reloads nothing and raises no `url` event.

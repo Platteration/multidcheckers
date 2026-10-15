@@ -43,40 +43,27 @@ export function codeFromUrl(url: string | null | undefined): string | null {
   return /\/load\/([^/?#]+)\/?$/.exec(parts.path)?.[1] ?? null;
 }
 
-let launchUrlTaken = false;
-
-/**
- * The address the app was launched with, the first time it is asked for in a
- * run, and null every time after. `read` is the platform's getInitialURL,
- * which is no record of what is still waiting: React Native reports the intent
- * or launch option that started the app for as long as it runs, and
- * react-native-web the `location.href` it read when the bundle loaded, before
- * clearCodeFromUrl took the code out of it. The screen that asks is mounted
- * again by the error boundary, from both of its buttons, and asking again
- * there answered the link a second time: after "Start a new game" it loaded
- * the launch link's game over the new game the reset had just promised,
- * without a question, one the player had declined included, and after "Try
- * again" it put a declined link's question back. A link that arrives while the
- * app runs comes through the `url` event instead, once per link.
- */
-export function takeLaunchUrl(read: () => Promise<string | null>): Promise<string | null> {
-  if (launchUrlTaken) return Promise.resolve(null);
-  launchUrlTaken = true;
-  return read();
+/** Remove a consumed web deep-link so a reload cannot replay it. */
+export function clearCodeFromUrl(): void {
+  if (typeof window === 'undefined' || !window.location?.href || !window.history?.replaceState) return;
+  try {
+    const url = new URL(window.location.href);
+    let changed = false;
+    if (url.searchParams.has('code')) {
+      url.searchParams.delete('code');
+      changed = true;
+    }
+    if (url.hash.startsWith('#code=')) {
+      url.hash = '';
+      changed = true;
+    }
+    if (changed) window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // A non-browser URL implementation should not prevent opening a game.
+  }
 }
 
-/**
- * A shareable link for the web build, or null when not running on the web.
- *
- * The code goes in the fragment, which a browser never sends to the host. In
- * the query it was part of the request line, at about a hundred bytes an
- * action, and a game past about eighty actions outgrew the 8 KB line that
- * Apache and nginx accept by default: the link answered "414 Request-URI Too
- * Large", the server's own page rather than the game. It also put the whole
- * game in the host's access log, which made the About card's "a game code goes
- * only where you send it" untrue. codeFromUrl reads both shapes, so a link sent
- * before this one still loads.
- */
+/** A shareable link for the web build, or null when not running on the web. */
 export function webLinkFor(code: string): string | null {
   if (typeof window === 'undefined' || !window.location?.origin || window.location.origin.startsWith('null')) return null;
   return `${window.location.origin}${window.location.pathname}#code=${encodeURIComponent(code)}`;
