@@ -113,6 +113,17 @@ answer, on a host with no API too. A site with no API, or whose `api/config`
 fails or is not the API's answer, is a host with no API for that visit:
 every look free.
 
+## Design comparisons
+
+The dated Checkers comparisons and concept artwork are versioned in the shared bundle in the Chess repository:
+
+- [Checkers phone screenshot comparison](https://github.com/Platteration/chesscheatser/blob/4d6a208d90d404f2d6a3b93fcf17ae3707b58f0d/docs/comparisons/comparisons/multidcheckers-phone-light-game.png)
+- [Checkers sprite style comparisons](https://github.com/Platteration/chesscheatser/blob/4d6a208d90d404f2d6a3b93fcf17ae3707b58f0d/docs/comparisons/styles/comparisons/checkers-light.png)
+- [Complete galleries, PNG sprites and editable Blender projects](https://github.com/Platteration/chesscheatser/tree/4d6a208d90d404f2d6a3b93fcf17ae3707b58f0d/docs/comparisons)
+- [Clone, open, edit or export the comparison bundle](https://github.com/Platteration/chesscheatser/blob/4d6a208d90d404f2d6a3b93fcf17ae3707b58f0d/docs/comparisons/GIT.md)
+
+The screenshots record the 11 October 2026 capture commits; the Arcade Pop, Neon Circuit and Porcelain Studio concepts were added on 13 October. These links pin the shared asset revision so they remain reproducible as the apps evolve.
+
 ## Running it
 
 ```sh
