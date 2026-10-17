@@ -14,7 +14,7 @@
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
-    "react": "19.2.3",
+    "react": "19.3.0",
     "react-dom": "^19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
@@ -23,7 +23,7 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^22.20.5",
-    "@types/react": "~19.2.2",
+    "@types/react": "~19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
     "globals": "^16.0.0",
